@@ -3,14 +3,23 @@
 // by pi/install.sh allows the systemctl restarts).
 
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
+import { pipeline } from 'node:stream/promises'
 import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 
+import { saveConfigAtomic } from '../config.js'
 import { collect } from '../diagnostics.js'
+import { createBackup, restoreBackup, listDrives, listBackupsOnDrives, backupFileName } from '../backup.js'
 
 const exec = promisify(execFile)
 const DEMO = !!process.env.DEMO
+
+// config is also the live object the server reads, and load() decorates it
+// with where it came from. Writing that back would persist a path into the
+// file that describes the file.
+const stripRuntime = (c) => { const o = { ...c }; delete o.configPath; delete o.serverRoot; return o }
 
 export default async function systemRoutes(app, { config, state, db, support }) {
   const repoRoot = path.resolve(config.serverRoot, '..')
@@ -112,6 +121,128 @@ export default async function systemRoutes(app, { config, state, db, support }) 
       return { ok: true, restarted: target.unit }
     } catch (err) {
       return reply.code(500).send({ error: `could not restart ${target.unit}: ${err.message}` })
+    }
+  })
+
+  // ---- backup and restore --------------------------------------------------
+  //
+  // The thing a customer cannot rebuild: their equipment pairings, their
+  // ranges, their chemistry history, their coral journal, their photos. A dead
+  // SD card should cost an afternoon of waiting for hardware, not an evening
+  // of re-entering everything and the permanent loss of two years of readings.
+  //
+  // This is deliberately NOT on the support-session allowlist. The archive
+  // carries the Apex password and the Ring refresh token, and the support
+  // panel promises the customer in plain words that support sees how the
+  // terminal is working and not their tank's history. A backup is both of
+  // those things at once, so it stays something the owner takes, on their own
+  // network, to their own disk.
+
+  app.get('/api/system/backup', async (req, reply) => {
+    const includePhotos = req.query?.photos !== '0'
+    const stamp = new Date().toISOString().slice(0, 10)
+    const safeName = String(config.tankName || 'reefgauge').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-|-$/g, '') || 'reefgauge'
+    const outFile = path.join(os.tmpdir(), `reefgauge-backup-${process.pid}-${Date.now()}.tar.gz`)
+    try {
+      const manifest = await createBackup({
+        config, db, version: readVersion(),
+        tankName: config.tankName, includePhotos, outFile
+      })
+      reply.header('content-type', 'application/gzip')
+      reply.header('content-length', manifest.bytes)
+      reply.header('content-disposition', `attachment; filename="${safeName}-${stamp}.reefgauge"`)
+      const stream = fs.createReadStream(outFile)
+      // Delete once it is on the wire either way; a half-sent archive left in
+      // /tmp is a copy of the customer's credentials nobody is watching.
+      stream.on('close', () => { try { fs.unlinkSync(outFile) } catch {} })
+      return reply.send(stream)
+    } catch (err) {
+      try { fs.unlinkSync(outFile) } catch {}
+      return reply.code(500).send({ error: `backup failed: ${err.message}` })
+    }
+  })
+
+  // What the wall-mounted unit actually offers: the sticks it can see, the
+  // backups already on them, and a one-tap save. Everything the panel needs to
+  // draw itself comes back in one call, because it is drawn on a touchscreen
+  // by someone holding a USB stick.
+  app.get('/api/system/backup/usb', async () => ({
+    drives: await listDrives(),
+    backups: await listBackupsOnDrives(),
+    lastBackupAt: config.lastBackupAt ?? null
+  }))
+
+  app.post('/api/system/backup/usb', async (req, reply) => {
+    const drives = await listDrives()
+    const drive = req.body?.path ? drives.find((d) => d.path === req.body.path) : drives[0]
+    if (!drive) return reply.code(400).send({ error: 'no USB drive is plugged in' })
+
+    const outFile = path.join(drive.path, backupFileName(config.tankName))
+    try {
+      const manifest = await createBackup({
+        config, db, version: readVersion(), tankName: config.tankName,
+        includePhotos: req.body?.photos !== false, outFile
+      })
+      // Flush before telling anyone it is safe to pull the stick out. Without
+      // this the file is in the page cache and a stick removed straight after
+      // the success message can carry an empty or truncated archive.
+      try { await exec('sync', [], { timeout: 30000 }) } catch { /* best effort */ }
+
+      config.lastBackupAt = new Date().toISOString()
+      try { saveConfigAtomic(config.configPath, stripRuntime(config)) } catch { /* not worth failing the backup over */ }
+
+      return { ok: true, drive: drive.label, file: path.basename(outFile), ...manifest }
+    } catch (err) {
+      try { fs.unlinkSync(outFile) } catch {}
+      return reply.code(500).send({ error: `could not write to ${drive.label}: ${err.message}` })
+    }
+  })
+
+  app.post('/api/system/restore/usb', async (req, reply) => {
+    const wanted = req.body?.file
+    const found = (await listBackupsOnDrives()).find((b) => b.file === wanted)
+    if (!found) return reply.code(404).send({ error: 'that backup is no longer on the drive' })
+    const dryRun = req.body?.dryRun === true
+    try {
+      const result = await restoreBackup({ archive: found.file, config, version: readVersion(), dryRun })
+      if (dryRun) return { ok: true, dryRun: true, ...result }
+      reply.send({ ok: true, ...result, restarting: 'reef-server.service' })
+      setTimeout(() => {
+        spawn('sudo', ['-n', 'systemctl', 'restart', 'reef-server.service'],
+              { detached: true, stdio: 'ignore' }).unref()
+      }, 250)
+      return reply
+    } catch (err) {
+      return reply.code(400).send({ error: err.message })
+    }
+  })
+
+  app.post('/api/system/restore', async (req, reply) => {
+    const dryRun = req.query?.dryRun === '1' || req.query?.dryRun === 'true'
+    const upload = await req.file?.({ limits: { fileSize: 2 * 1024 * 1024 * 1024 } })
+    if (!upload) return reply.code(400).send({ error: 'send the backup file as multipart form data' })
+
+    const incoming = path.join(os.tmpdir(), `reefgauge-restore-${process.pid}-${Date.now()}.tar.gz`)
+    try {
+      await pipeline(upload.file, fs.createWriteStream(incoming))
+      if (upload.file.truncated) return reply.code(413).send({ error: 'that file is too large' })
+
+      const result = await restoreBackup({ archive: incoming, config, version: readVersion(), dryRun })
+      if (dryRun) return { ok: true, dryRun: true, ...result }
+
+      // The database this process has open is the one that was just moved
+      // aside, so nothing is actually restored until the server restarts.
+      // Answer first, then go.
+      reply.send({ ok: true, ...result, restarting: 'reef-server.service' })
+      setTimeout(() => {
+        spawn('sudo', ['-n', 'systemctl', 'restart', 'reef-server.service'],
+              { detached: true, stdio: 'ignore' }).unref()
+      }, 250)
+      return reply
+    } catch (err) {
+      return reply.code(400).send({ error: err.message })
+    } finally {
+      try { fs.unlinkSync(incoming) } catch {}
     }
   })
 

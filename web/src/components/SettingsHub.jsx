@@ -6,6 +6,7 @@ import PhotoManager from './PhotoManager.jsx'
 import UpdatePanel from './UpdatePanel.jsx'
 import AlarmSettings from './AlarmSettings.jsx'
 import ScreensaverSettings from './ScreensaverSettings.jsx'
+import BackupPanel from './BackupPanel.jsx'
 import SupportPanel from './SupportPanel.jsx'
 import DosingSettings from './DosingSettings.jsx'
 import OnScreenKeyboard from './OnScreenKeyboard.jsx'
@@ -33,7 +34,8 @@ const Ico = {
   screen: <svg {...S}><rect x="2" y="4" width="20" height="13" rx="2" /><path d="M8 21h8" /><path d="M12 17v4" /></svg>,
   download: <svg {...S}><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M4 21h16" /></svg>,
   warning: <svg {...S}><path d="M12 3.5 22 20H2z" /><path d="M12 10v4.5" /><path d="M12 17.4h.01" /></svg>,
-  lifebuoy: <svg {...S}><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="3.6" /><path d="m5.6 5.6 3.9 3.9" /><path d="m14.5 14.5 3.9 3.9" /><path d="m18.4 5.6-3.9 3.9" /><path d="m9.5 14.5-3.9 3.9" /></svg>
+  lifebuoy: <svg {...S}><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="3.6" /><path d="m5.6 5.6 3.9 3.9" /><path d="m14.5 14.5 3.9 3.9" /><path d="m18.4 5.6-3.9 3.9" /><path d="m9.5 14.5-3.9 3.9" /></svg>,
+  archive: <svg {...S}><path d="M3 7h18v13H3z" /><path d="M3 7l2-3h14l2 3" /><path d="M10 12h4" /></svg>
 }
 
 const SCREENSAVER_LINE = {
@@ -47,6 +49,16 @@ const SCREENSAVER_LINE = {
 // Section ids that are wizard steps carry that step's index; the rest are
 // panels of their own. Keeping the mapping here means the wizard needs to know
 // nothing about the hub.
+// Tile lines are one short phrase; the panel itself is where precision lives.
+function relativeDays(iso) {
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
+  if (days <= 0) return 'today'
+  if (days === 1) return 'yesterday'
+  if (days < 30) return `${days} days ago`
+  const months = Math.floor(days / 30)
+  return `${months} month${months === 1 ? '' : 's'} ago`
+}
+
 const SECTIONS = [
   {
     id: 'wifi',
@@ -91,6 +103,15 @@ const SECTIONS = [
     }
   },
   { id: 'update', icon: 'download', title: 'Software update', line: () => 'Check for a newer version' },
+  {
+    id: 'backup',
+    icon: 'archive',
+    title: 'Backup',
+    // Never having backed up is the state worth flagging: it costs nothing to
+    // fix and everything to discover after the fact.
+    line: (s) => (s.lastBackupAt ? `Last saved ${relativeDays(s.lastBackupAt)}` : 'Never backed up — tap to save one'),
+    bad: (s) => !s.lastBackupAt
+  },
   {
     id: 'support',
     icon: 'lifebuoy',
@@ -270,6 +291,7 @@ export default function SettingsHub({ onExit }) {
   if (open === 'screensaver') return panel('Screensaver', <ScreensaverSettings />)
   if (open === 'dosing') return panel('Dosing', <DosingSettings />)
   if (open === 'update') return panel('Update', <div className="setup-body"><h1>Software update</h1><UpdatePanel /></div>, 'Done')
+  if (open === 'backup') return panel('Backup', <BackupPanel />, 'Done')
   if (open === 'support') return panel('Support', <SupportPanel />, 'Done')
   if (open === 'reset') {
     return (

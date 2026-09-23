@@ -5,3 +5,8 @@ server/config.json
 __pycache__/
 .venv/
 .DS_Store
+
+# ESP-IDF build output for the CO2 puck (source lives on the co2-puck branch).
+# Ignored here too: switching branches otherwise leaves it as untracked noise
+# that stops scripts/release.sh, which refuses to cut a release from a dirty tree.
+firmware/build/

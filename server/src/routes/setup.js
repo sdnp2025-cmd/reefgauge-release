@@ -497,6 +497,7 @@ async function connectWifi(ssid, password) {
       },
       slideshow: config.slideshow?.source ?? 'intro',
       support: state.support ?? { active: false },
+      lastBackupAt: config.lastBackupAt ?? null,
       slideshowIdle: [2, 5, 10, 30, 60, 0].includes(Number(config.slideshow?.idleMinutes)) ? Number(config.slideshow.idleMinutes) : 5,
       dosingMethod: DOSING_METHODS[methodFor(config)].name,
       photos

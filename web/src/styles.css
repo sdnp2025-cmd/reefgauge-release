@@ -3152,3 +3152,36 @@ body {
 }
 .support-meta { text-align: center; font-size: 2vh; font-weight: 600; color: var(--ink-2); }
 .support-live { color: var(--ok); font-weight: 800; }
+
+/* Settings → Backup. The list is tapped with a fingertip on a wall panel, so
+   rows are targets, not text: 64px minimum and the whole row is the button. */
+/* Cancel, next to a destructive confirm. Same size and shape as the primary
+   so it is an equally easy target - the whole point is that backing out is
+   not the harder thing to do. */
+.setup-primary.ghost {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,.28);
+  color: inherit;
+}
+
+.backup-state {
+  margin: 14px 0; padding: 10px 14px; border-radius: 10px;
+  background: rgba(255,255,255,.06); font-size: 17px;
+}
+.backup-state.bad { background: rgba(214,122,32,.18); color: #f0b56a; }
+
+.backup-item {
+  display: block; width: 100%; text-align: left;
+  margin: 10px 0; padding: 14px 16px; min-height: 64px;
+  border: 1px solid rgba(255,255,255,.14); border-radius: 12px;
+  background: rgba(255,255,255,.04); color: inherit; font: inherit;
+  position: relative;
+}
+.backup-item.tappable { cursor: pointer; }
+.backup-item.tappable:active { background: rgba(255,255,255,.10); }
+.backup-item-name { font-size: 19px; font-weight: 600; }
+.backup-item-meta { font-size: 15px; opacity: .72; margin-top: 3px; }
+.backup-item-action {
+  position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+  font-size: 16px; font-weight: 600; opacity: .85;
+}

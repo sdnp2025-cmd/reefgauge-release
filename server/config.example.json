@@ -99,5 +99,9 @@
       "warningTone": "alert"
     }
   },
+  "support": {
+    "relay": "wss://relay.reefgauge.com",
+    "enrollKey": ""
+  },
   "setupComplete": false
 }

@@ -24,7 +24,7 @@ This repository is public so that ReefGauge terminals can update themselves,
 not as an offer of permission. If you own a ReefGauge, your terminal is
 licensed and this is where its updates come from. Anything else — running it
 on your own hardware, reusing the code, building a device from it — needs
-written permission: hello@reefgauge.com.
+written permission: Admin@reefgauge.com.
 
 REEFGAUGE and the ReefGauge logo are trademarks. The brand files here are
 present because a terminal displays them; they are not licensed for use.
