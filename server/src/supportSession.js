@@ -1,0 +1,177 @@
+// A support session, from the terminal's side.
+//
+// The customer taps "Get support". This opens an outbound WebSocket to the
+// relay, gets a six-digit code back, and shows it on screen. Whoever has the
+// code — read out over the phone — can then ask this terminal a limited set
+// of questions until the hour is up or the customer taps "End".
+//
+// Three properties worth defending, because they are the whole reason this
+// design was chosen over an always-on tunnel:
+//
+//   Nothing opens without the customer. There is no way in from outside; the
+//   socket is dialled from here, by a tap on the glass.
+//
+//   The allowlist lives HERE. The relay forwards {method, path} envelopes and
+//   this file decides what it is willing to answer. Compromising the relay
+//   does not widen the surface, and neither does a leaked operator key.
+//
+//   It closes itself. An hour, or the customer's tap, or a lost socket. A
+//   session that has to be remembered to be revoked will be forgotten.
+//
+// What support can reach is the unit's health, not the customer's tank: the
+// diagnostics, the logs, the service restarts, the version. Not the photos,
+// not the coral journal, not the chemistry history.
+
+const ALLOW = [
+  ['GET', /^\/api\/system\/diagnostics$/],
+  ['GET', /^\/api\/system\/support-bundle$/],
+  ['GET', /^\/api\/system\/logs(\?.*)?$/],
+  ['GET', /^\/api\/system\/version$/],
+  ['GET', /^\/api\/system\/update\/check$/],
+  ['GET', /^\/api\/health$/],
+  ['GET', /^\/api\/setup\/status$/],
+  ['GET', /^\/api\/setup\/summary$/],
+  ['POST', /^\/api\/system\/restart\/(server|sensor|display)$/],
+  ['POST', /^\/api\/system\/update$/],
+  ['POST', /^\/api\/system\/reboot$/]
+]
+
+const allowed = (method, path) => ALLOW.some(([m, re]) => m === method && re.test(path))
+
+const RECONNECT_MS = 5000
+const MAX_MS = 60 * 60 * 1000
+
+export function createSupportSession({ config, state, log = console }) {
+  state.support = { active: false, code: null, expiresAt: null, operatorPresent: false, error: null }
+
+  let ws = null
+  let timer = null
+  let closing = false
+
+  const relayUrl = () => (config.support?.relay ?? 'wss://relay.reefgauge.com').replace(/\/$/, '')
+  const port = config.port ?? 8080
+
+  function reset(error = null) {
+    clearTimeout(timer)
+    timer = null
+    state.support = { active: false, code: null, expiresAt: null, operatorPresent: false, error }
+  }
+
+  async function handleRequest(msg) {
+    const { id, method = 'GET', path } = msg
+    const reply = (status, body) => {
+      try { ws?.send(JSON.stringify({ type: 'response', id, status, body })) } catch { /* socket gone */ }
+    }
+    if (typeof path !== 'string' || !allowed(method, path)) {
+      log.warn?.(`support: refused ${method} ${path}`)
+      return reply(403, { error: 'that is not available during a support session' })
+    }
+    try {
+      // Straight back into our own API over loopback, with this unit's token.
+      // Going through HTTP rather than calling the route functions keeps the
+      // support surface identical to the one the tool uses on the LAN.
+      const res = await fetch(`http://127.0.0.1:${port}${path}`, {
+        method,
+        headers: config.apiToken ? { authorization: `Bearer ${config.apiToken}` } : {},
+        signal: AbortSignal.timeout(45000)
+      })
+      const text = await res.text()
+      let body
+      try { body = JSON.parse(text) } catch { body = { raw: text.slice(0, 100000) } }
+      reply(res.status, body)
+    } catch (err) {
+      reply(502, { error: `the terminal could not answer: ${err.message}` })
+    }
+  }
+
+  function connect() {
+    const url = `${relayUrl()}/terminal`
+    try {
+      ws = new WebSocket(url, config.support?.enrollKey
+        ? { headers: { authorization: `Bearer ${config.support.enrollKey}` } }
+        : undefined)
+    } catch (err) {
+      reset(`could not reach the support relay: ${err.message}`)
+      return
+    }
+
+    ws.addEventListener('open', () => {
+      ws.send(JSON.stringify({
+        type: 'register',
+        unit: {
+          tankName: config.tankName ?? null,
+          version: state.version ?? null,
+          hostname: process.env.HOSTNAME ?? null
+        }
+      }))
+    })
+
+    ws.addEventListener('message', (ev) => {
+      let msg
+      try { msg = JSON.parse(typeof ev.data === 'string' ? ev.data : ev.data.toString()) } catch { return }
+      switch (msg.type) {
+        case 'registered':
+          state.support = {
+            active: true,
+            code: msg.code,
+            expiresAt: Math.min(msg.expiresAt ?? Infinity, Date.now() + MAX_MS),
+            operatorPresent: false,
+            error: null
+          }
+          log.info?.(`support session open, code ${msg.code}`)
+          // Belt and braces: the relay expires it too, but a terminal that
+          // trusts the other end to close the door is not closed.
+          timer = setTimeout(() => end('the hour is up'), state.support.expiresAt - Date.now())
+          break
+        case 'operator-joined':
+          state.support.operatorPresent = true
+          log.info?.('support: an operator joined the session')
+          break
+        case 'operator-left':
+          state.support.operatorPresent = false
+          break
+        case 'request':
+          handleRequest(msg)
+          break
+        case 'closed':
+          reset(msg.reason ?? null)
+          break
+        default:
+          break
+      }
+    })
+
+    ws.addEventListener('close', () => {
+      if (closing) return reset()
+      // Dropped before the customer ended it: try once more, then give up
+      // rather than hammering a relay that may be down.
+      if (state.support.active) {
+        log.warn?.('support: relay connection lost, retrying once')
+        state.support.active = false
+        setTimeout(() => { if (!closing) connect() }, RECONNECT_MS)
+      }
+    })
+
+    ws.addEventListener('error', () => { /* close follows */ })
+  }
+
+  function start() {
+    if (state.support.active) return state.support
+    closing = false
+    reset()
+    connect()
+    return state.support
+  }
+
+  function end(why = 'ended by the customer') {
+    closing = true
+    clearTimeout(timer)
+    try { ws?.close() } catch { /* already gone */ }
+    ws = null
+    reset()
+    log.info?.(`support session ${why}`)
+    return state.support
+  }
+
+  return { start, end, status: () => state.support }
+}

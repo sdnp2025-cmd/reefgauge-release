@@ -1,0 +1,55 @@
+# ReefGauge boot screen, for Plymouth's script plugin.
+#
+# Covers the seconds between the firmware and the kiosk: the same deep water
+# as the in-app splash (web/src/components/BootSplash.jsx), the logo fading
+# up and rising a little, three dots breathing underneath. Plymouth refreshes
+# about fifty times a second; everything below is in those ticks.
+
+Window.SetBackgroundTopColor(0.04, 0.29, 0.53);      # #0a4a86
+Window.SetBackgroundBottomColor(0.02, 0.15, 0.28);   # #052548
+
+screen.w = Window.GetWidth();
+screen.h = Window.GetHeight();
+
+logo.image = Image("logo.png");
+logo.w = screen.w * 0.46;      # 470px at 1024 - matches the wallpaper and the in-app splash
+logo.scale = logo.w / logo.image.GetWidth();
+logo.image = logo.image.Scale(logo.w, logo.image.GetHeight() * logo.scale);
+logo.sprite = Sprite(logo.image);
+logo.x = (screen.w - logo.image.GetWidth()) / 2;
+logo.y = (screen.h - logo.image.GetHeight()) / 2;
+logo.sprite.SetPosition(logo.x, logo.y + 30, 10);
+logo.sprite.SetOpacity(0);
+
+dot.image = Image("dot.png");
+dot.gap = 22;
+for (i = 0; i < 3; i++) {
+  dots[i] = Sprite(dot.image);
+  dots[i].SetPosition(screen.w / 2 - dot.gap + i * dot.gap - dot.image.GetWidth() / 2,
+                      logo.y + logo.image.GetHeight() + screen.h * 0.06, 10);
+  dots[i].SetOpacity(0);
+}
+
+tick = 0;
+fun refresh() {
+  tick++;
+  # the logo: one second up, with a soft ease
+  if (tick <= 50) {
+    f = tick / 50;
+    e = 1 - (1 - f) * (1 - f);
+    logo.sprite.SetOpacity(e);
+    logo.sprite.SetY(logo.y + 30 * (1 - e));
+  }
+  # the dots: a wave, each a third of a cycle behind the last
+  for (i = 0; i < 3; i++) {
+    ph = (tick / 12) - i * 0.9;
+    v = Math.Sin(ph);
+    if (v < 0) v = 0;
+    dots[i].SetOpacity(0.25 + 0.75 * v);
+  }
+}
+Plymouth.SetRefreshFunction(refresh);
+
+# Boot messages (fsck and friends) would print over the picture; keep them off.
+fun message_callback(text) { }
+Plymouth.SetMessageFunction(message_callback);

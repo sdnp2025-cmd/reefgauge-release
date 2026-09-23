@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ReefGauge</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" />
+    <link rel="stylesheet" href="/reef/aquarium.css" />
+    <link rel="icon" href="/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <meta name="theme-color" content="#0f9bb5" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- The kiosk's very first paint, before the bundle has loaded: the same
+         deep water and logo as the Plymouth theme and the desktop wallpaper,
+         so nothing white ever flashes. React replaces #root's contents with
+         the animated splash in the same place. Only the kiosk sees this;
+         deep links and phones get the app straight away. -->
+    <style>
+      html { background: linear-gradient(180deg, #0a4a86 0%, #073462 55%, #052548 100%) fixed; }
+      #root:empty::before {
+        content: '';
+        position: fixed; inset: 0;
+        background: url('/brand/reefgauge-logo-600.png') center / auto 67vh no-repeat;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

@@ -1,0 +1,33 @@
+# Chromium kiosk, as a restartable user service.
+#
+# Installed by pi/install.sh into ~/.config/systemd/user/ and enabled for the
+# kiosk user, so it starts with the graphical session and — critically —
+# restarts itself if Chromium dies. The previous arrangement launched
+# pi/kiosk.sh once from the compositor's autostart, which meant any crash left
+# the customer looking at a bare desktop until someone SSH'd in.
+
+[Unit]
+Description=ReefGauge kiosk browser
+# Deliberately NOT tied to graphical-session.target: labwc's session does not
+# activate it on Raspberry Pi OS, so binding to it leaves the kiosk dead. The
+# script waits for the compositor socket itself instead.
+After=default.target
+# Restart limits belong here, not in [Service] — systemd ignores them there,
+# and the 5-in-10s default then latches a briefly flapping browser off.
+StartLimitIntervalSec=300
+StartLimitBurst=20
+
+[Service]
+Type=simple
+# kiosk.sh waits for both the compositor socket and the server before starting
+# Chromium, so this unit is safe to start early in the session.
+Environment=XDG_RUNTIME_DIR=/run/user/%U
+Environment=WAYLAND_DISPLAY=wayland-0
+ExecStart=%h/reef-terminal/pi/kiosk.sh
+Restart=always
+# Long enough for a dying Chromium to release its profile lock, so a restart
+# doesn't immediately fail and burn the start-limit budget.
+RestartSec=5
+
+[Install]
+WantedBy=default.target

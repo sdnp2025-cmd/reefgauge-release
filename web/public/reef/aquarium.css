@@ -1,0 +1,278 @@
+/* ============================================================
+   PHOTOREAL REEF AQUARIUM BACKGROUND  (v2)
+   Photographic reef plate + cut-out fish sprites, animated
+   entirely in CSS. No JavaScript.
+
+   Built for Raspberry Pi / Chromium kiosk: every animation
+   touches ONLY transform and opacity, so the compositor moves
+   pre-rasterized textures on the GPU.
+
+   MEASURED on the Pi 4 (GPU process, share of one core):
+     full scene 138%  ·  is-lite 63%  ·  is-still 6%
+   Any running animation costs ~40% just to composite at 60fps;
+   after that it is per layer, and bubbles (18 gradient layers)
+   and the masked foreground plate are the expensive ones. The
+   terminal therefore ships is-lite: the twelve fish, bobbing,
+   over a still plate. Full is kept for capture (?fullreef).
+
+   ASSETS  (default path ./assets/ — change in the markup)
+     reef-bg.jpg   1920x1072  reef plate, no fish
+     clown.png bluetang.png yellowtang.png gramma.png
+     copperband.png flame.png chromis.png powderblue.png
+
+   TUNING
+     .reef.is-lite   fewer elements + no blur, for Pi 3 / Zero 2
+     .reef.is-still  freeze everything
+     prefers-reduced-motion honored automatically
+   ============================================================ */
+
+/* ---------- Stage ---------------------------------------- */
+
+.reef {
+  /* Vendored from the "photoreal reef aquarium" pack, scoped to sit inside
+     the Reef Tank panel rather than the whole page (original: position:
+     fixed; inset:0; z-index:-1). */
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
+  contain: strict;
+  background: #04141f;         /* matches the plate's dark water */
+}
+
+/* ---------- Layer 1: the photographic reef ---------------- */
+
+.reef__plate {
+  position: absolute;
+  /* oversized so the slow drift never exposes an edge */
+  inset: -4%;
+  background: url("assets/reef-bg.jpg") center bottom / cover no-repeat;
+  will-change: transform;
+  animation: plate-drift 90s ease-in-out infinite;
+}
+
+/* A barely-there push-in and slide. Sells "this is water"
+   without ever being noticeable as motion.                   */
+@keyframes plate-drift {
+  0%, 100% { transform: scale(1.00) translate3d(0, 0, 0); }
+  33%      { transform: scale(1.045) translate3d(-1.2%, -0.5%, 0); }
+  66%      { transform: scale(1.03) translate3d(1%, 0.4%, 0); }
+}
+
+/* ---------- Layer 2: surface light shafts ----------------- */
+
+.reef__rays { position: absolute; inset: -15% 0 auto 0; height: 105%; }
+
+.ray {
+  position: absolute;
+  top: 0;
+  left: var(--x);
+  width: var(--w);
+  height: 100%;
+  transform-origin: 50% 0;
+  background: linear-gradient(
+    180deg,
+    rgba(200, 240, 255, .40) 0%,
+    rgba(180, 230, 255, .14) 40%,
+    transparent 78%
+  );
+  clip-path: polygon(40% 0, 60% 0, 100% 100%, 0% 100%);
+  opacity: .10;
+  animation: ray-drift var(--dur) ease-in-out var(--delay) infinite;
+}
+
+.ray:nth-child(1) { --x:  8%; --w: 10vw; --tilt:  7deg; --dur: 16s; --delay:  -2s; }
+.ray:nth-child(2) { --x: 27%; --w: 14vw; --tilt: -5deg; --dur: 21s; --delay:  -7s; }
+.ray:nth-child(3) { --x: 49%; --w:  8vw; --tilt: 10deg; --dur: 18s; --delay: -12s; }
+.ray:nth-child(4) { --x: 71%; --w: 15vw; --tilt: -8deg; --dur: 24s; --delay:  -5s; }
+.ray:nth-child(5) { --x: 89%; --w: 10vw; --tilt:  6deg; --dur: 19s; --delay: -15s; }
+
+@keyframes ray-drift {
+  0%, 100% { transform: rotate(var(--tilt)) scaleX(1);   opacity: .07; }
+  50%      { transform: rotate(calc(var(--tilt) * -.5)) scaleX(1.4); opacity: .20; }
+}
+
+/* ---------- Layer 3: the fish ----------------------------- */
+
+.reef__school { position: absolute; inset: 0; }
+
+.fish {
+  position: absolute;
+  top: var(--y);
+  left: 0;
+  width: var(--size);
+  opacity: var(--o, 1);
+  will-change: transform;
+  animation: swim-ltr var(--dur) linear var(--delay) infinite;
+}
+.fish--rtl { animation-name: swim-rtl; }
+
+/* the bob and the body roll — independent of the crossing */
+.fish__bob { animation: bob var(--bob-dur, 3.4s) ease-in-out infinite; }
+
+.fish img {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* sprites are drawn facing right; flip for the other direction */
+  transform: scaleX(var(--dir, 1));
+  /* Colour-match the studio-lit sprites to the dim reef plate, and
+     apply depth-of-field per tier. All STATIC — Chromium rasterizes
+     the result once and then only transforms the cached texture,
+     so none of this costs per-frame CPU.                          */
+  filter: blur(var(--blur, 0px)) saturate(.82) brightness(.86) contrast(1.04);
+}
+.fish--rtl img { --dir: -1; }
+.fish--far { --blur: 1.7px; }
+.fish--mid { --blur: .7px; }
+
+@keyframes swim-ltr {
+  from { transform: translate3d(-30vw, 0, 0); }
+  to   { transform: translate3d(135vw, 0, 0); }
+}
+@keyframes swim-rtl {
+  from { transform: translate3d(135vw, 0, 0); }
+  to   { transform: translate3d(-30vw, 0, 0); }
+}
+
+/* translateY + a small roll + a very slight vertical squash.
+   The squash is what reads as the body flexing as it swims.   */
+@keyframes bob {
+  0%, 100% { transform: translateY(0)                    rotate(0deg)    scaleY(1); }
+  25%      { transform: translateY(calc(var(--bob) * -1)) rotate(-2deg)   scaleY(.985); }
+  50%      { transform: translateY(0)                    rotate(0deg)    scaleY(1); }
+  75%      { transform: translateY(var(--bob))            rotate(2deg)    scaleY(1.015); }
+}
+
+/* Per-fish placement. Three depth tiers: far fish are small,
+   faint, blurred and slow; near fish are large, sharp, quick. */
+.fish:nth-child(1)  { --y: 12%; --size: 15vw; --dur: 38s; --delay:  -4s; --bob: 9px;  --bob-dur: 3.0s; --o: 1;   }
+.fish:nth-child(2)  { --y: 30%; --size:  7vw; --dur: 67s; --delay: -21s; --bob: 4px;  --bob-dur: 4.4s; --o: .55; }
+.fish:nth-child(3)  { --y: 44%; --size: 18vw; --dur: 31s; --delay:  -9s; --bob: 11px; --bob-dur: 2.7s; --o: 1;   }
+.fish:nth-child(4)  { --y: 58%; --size:  6vw; --dur: 73s; --delay: -35s; --bob: 3px;  --bob-dur: 4.9s; --o: .48; }
+.fish:nth-child(5)  { --y: 22%; --size: 11vw; --dur: 47s; --delay: -28s; --bob: 7px;  --bob-dur: 3.6s; --o: .85; }
+.fish:nth-child(6)  { --y: 60%; --size: 13vw; --dur: 43s; --delay: -13s; --bob: 8px;  --bob-dur: 3.3s; --o: .92; }
+.fish:nth-child(7)  { --y: 37%; --size:  5vw; --dur: 79s; --delay: -52s; --bob: 3px;  --bob-dur: 5.3s; --o: .42; }
+.fish:nth-child(8)  { --y: 52%; --size: 10vw; --dur: 53s; --delay: -40s; --bob: 6px;  --bob-dur: 3.9s; --o: .8;  }
+.fish:nth-child(9)  { --y:  8%; --size:  6vw; --dur: 61s; --delay: -55s; --bob: 4px;  --bob-dur: 4.7s; --o: .5;  }
+.fish:nth-child(10) { --y: 64%; --size: 16vw; --dur: 41s; --delay: -24s; --bob: 10px; --bob-dur: 3.1s; --o: .97; }
+.fish:nth-child(11) { --y: 26%; --size:  9vw; --dur: 59s; --delay: -17s; --bob: 5px;  --bob-dur: 4.1s; --o: .75; }
+.fish:nth-child(12) { --y: 48%; --size:  4vw; --dur: 83s; --delay: -66s; --bob: 2px;  --bob-dur: 5.7s; --o: .38; }
+
+/* ---------- Layer 4: bubbles ------------------------------ */
+
+.reef__bubbles { position: absolute; inset: 0; }
+
+.bubble {
+  position: absolute;
+  bottom: -8vh;
+  left: var(--x);
+  width: var(--size);
+  height: var(--size);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 32% 28%,
+      rgba(255,255,255,.95) 0%,
+      rgba(255,255,255,.28) 26%,
+      rgba(255,255,255,.04) 58%,
+      rgba(255,255,255,.16) 100%);
+  border: 1px solid rgba(255,255,255,.4);
+  will-change: transform, opacity;
+  animation: rise var(--dur) linear var(--delay) infinite;
+}
+
+@keyframes rise {
+  0%   { transform: translate3d(0, 0, 0) scale(.45);                    opacity: 0; }
+  9%   {                                                                opacity: var(--o); }
+  25%  { transform: translate3d(var(--drift), -28vh, 0) scale(.85); }
+  50%  { transform: translate3d(0, -55vh, 0) scale(1); }
+  75%  { transform: translate3d(calc(var(--drift) * -1), -82vh, 0) scale(1.05); }
+  92%  {                                                                opacity: var(--o); }
+  100% { transform: translate3d(0, -112vh, 0) scale(1.15);              opacity: 0; }
+}
+
+.bubble:nth-child(1)  { --x:  5%; --size:  9px; --dur: 12s; --delay:  -1s; --drift: 20px; --o: .5; }
+.bubble:nth-child(2)  { --x: 12%; --size:  5px; --dur: 16s; --delay:  -7s; --drift: 13px; --o: .36; }
+.bubble:nth-child(3)  { --x: 19%; --size: 14px; --dur: 10s; --delay:  -4s; --drift: 27px; --o: .55; }
+.bubble:nth-child(4)  { --x: 26%; --size:  7px; --dur: 14s; --delay: -11s; --drift: 17px; --o: .42; }
+.bubble:nth-child(5)  { --x: 33%; --size: 11px; --dur: 18s; --delay:  -2s; --drift: 24px; --o: .48; }
+.bubble:nth-child(6)  { --x: 40%; --size:  4px; --dur: 11s; --delay: -13s; --drift: 11px; --o: .3;  }
+.bubble:nth-child(7)  { --x: 47%; --size: 13px; --dur: 15s; --delay:  -6s; --drift: 26px; --o: .54; }
+.bubble:nth-child(8)  { --x: 54%; --size:  8px; --dur: 13s; --delay:  -9s; --drift: 19px; --o: .45; }
+.bubble:nth-child(9)  { --x: 61%; --size:  6px; --dur: 17s; --delay:  -3s; --drift: 15px; --o: .38; }
+.bubble:nth-child(10) { --x: 68%; --size: 16px; --dur:  9s; --delay: -12s; --drift: 31px; --o: .58; }
+.bubble:nth-child(11) { --x: 75%; --size:  9px; --dur: 14s; --delay:  -5s; --drift: 20px; --o: .46; }
+.bubble:nth-child(12) { --x: 82%; --size:  5px; --dur: 19s; --delay:  -8s; --drift: 12px; --o: .34; }
+.bubble:nth-child(13) { --x: 89%; --size: 12px; --dur: 12s; --delay: -15s; --drift: 25px; --o: .52; }
+.bubble:nth-child(14) { --x: 96%; --size:  7px; --dur: 16s; --delay:  -2s; --drift: 16px; --o: .4;  }
+.bubble:nth-child(15) { --x:  9%; --size: 15px; --dur: 21s; --delay: -17s; --drift: 28px; --o: .56; }
+.bubble:nth-child(16) { --x: 44%; --size:  4px; --dur: 23s; --delay: -10s; --drift: 10px; --o: .28; }
+.bubble:nth-child(17) { --x: 71%; --size: 17px; --dur: 13s; --delay: -19s; --drift: 33px; --o: .6;  }
+.bubble:nth-child(18) { --x: 30%; --size:  8px; --dur: 22s; --delay:  -4s; --drift: 18px; --o: .44; }
+
+/* ---------- Layer 4.5: the foreground reef ---------------- */
+/* The SAME plate image, drifting in lockstep, masked so only the
+   near coral survives — drawn above the school. This is what lets
+   fish pass BEHIND the foreground rock instead of skating over
+   the top of everything. One static texture; the mask costs
+   nothing per frame.                                            */
+
+.reef__front {
+  position: absolute;
+  inset: -4%;
+  background: url("assets/reef-bg.jpg") center bottom / cover no-repeat;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 69%, #000 85%);
+          mask-image: linear-gradient(to bottom, transparent 69%, #000 85%);
+  will-change: transform;
+  animation: plate-drift 90s ease-in-out infinite;
+}
+
+/* ---------- Layer 5: the grade ---------------------------- */
+/* Sits ABOVE the fish. This is what makes the sprites belong
+   to the photograph: one blue wash + vignette over everything,
+   so lighting and color match instead of looking pasted on.   */
+
+.reef__grade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg,
+      rgba(20, 105, 150, .30) 0%,
+      rgba(10,  60, 100, .16) 35%,
+      rgba(4,   30,  55, .26) 75%,
+      rgba(2,   16,  30, .48) 100%),
+    radial-gradient(130% 95% at 50% 30%, transparent 38%, rgba(0, 10, 22, .62) 100%);
+}
+
+/* ---------- Lite mode ------------------------------------- */
+/* The whole school, bobbing, over a still photograph. No
+   bubbles, no rays, no masked foreground plate: those are the
+   layers that cost, and none of them is what a person notices.
+   (Twelve fish measured ~13% more than six; the fish are the
+   point, so they stay.)                                        */
+
+.reef.is-lite .reef__bubbles,
+.reef.is-lite .reef__rays,
+.reef.is-lite .reef__front { display: none; }
+
+.reef.is-lite .fish img { filter: saturate(.82) brightness(.86) contrast(1.04); }
+.reef.is-lite .reef__plate { animation: none; inset: 0; will-change: auto; }
+
+/* ---------- Freeze ---------------------------------------- */
+
+.reef.is-still *,
+.reef.is-still *::before,
+.reef.is-still *::after { animation-play-state: paused !important; }
+
+/* Under the idle slideshow nothing of this is visible; stop paying for it. */
+body.is-idle .reef *,
+body.is-idle .reef *::before,
+body.is-idle .reef *::after { animation-play-state: paused !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .reef *, .reef *::before, .reef *::after { animation: none !important; }
+  .reef__plate, .reef__front { inset: 0; }
+  .fish { transform: translate3d(35vw, 0, 0); }
+}

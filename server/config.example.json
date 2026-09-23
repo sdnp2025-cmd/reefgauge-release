@@ -1,0 +1,103 @@
+{
+  "port": 8080,
+  "db": "./data/reef.db",
+  "apex": {
+    "host": "",
+    "username": "admin",
+    "password": "1234",
+    "pollSeconds": 60,
+    "inputs": {
+      "temp": "Tmp",
+      "ph": "pH",
+      "salinity": "Cond",
+      "alk": "Alk",
+      "ca": "Ca",
+      "mg": "Mg",
+      "no3": "NO3",
+      "po4": "PO4"
+    }
+  },
+  "ranges": {
+    "temp": [
+      77,
+      79
+    ],
+    "ph": [
+      7.9,
+      8.4
+    ],
+    "salinity": [
+      34,
+      36
+    ],
+    "alk": [
+      7.5,
+      9.5
+    ],
+    "ca": [
+      400,
+      450
+    ],
+    "mg": [
+      1250,
+      1400
+    ],
+    "no3": [
+      2,
+      10
+    ],
+    "po4": [
+      0.02,
+      0.1
+    ]
+  },
+  "redSea": {
+    "enabled": true,
+    "exclude": [],
+    "hosts": [],
+    "names": {}
+  },
+  "weather": {
+    "latitude": 40.7128,
+    "longitude": -74.006,
+    "radarUrl": ""
+  },
+  "media": {
+    "heosHost": "",
+    "playerName": "",
+    "openUrl": "https://www.pandora.com",
+    "presets": []
+  },
+  "ring": {
+    "refreshToken": "",
+    "cameraName": ""
+  },
+  "environment": {
+    "co2WarnPpm": 1000,
+    "co2HighPpm": 1500,
+    "tempOffsetC": 4
+  },
+  "tankName": "",
+  "slideshow": {
+    "source": "intro",
+    "idleMinutes": 5
+  },
+  "apiToken": "",
+  "alerts": {
+    "ntfyTopic": "",
+    "ntfyServer": "https://ntfy.sh",
+    "cooldownMinutes": 120,
+    "hysteresisPercent": 10,
+    "sound": {
+      "enabled": true,
+      "device": "plughw:0,0",
+      "loopMinutes": 10,
+      "loopGapSeconds": 4,
+      "quietFrom": 22,
+      "quietTo": 7,
+      "urgentTone": "siren",
+      "warningTone": "alert"
+    }
+  },
+  "setupComplete": false
+}

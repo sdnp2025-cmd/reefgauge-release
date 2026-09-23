@@ -1,0 +1,7 @@
+node_modules/
+dist/
+data/
+server/config.json
+__pycache__/
+.venv/
+.DS_Store

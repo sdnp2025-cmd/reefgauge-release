@@ -1,0 +1,3154 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* Sea Glass theme — bright airy glass by day, "Midnight Reef" after sunset.
+   Everything themable is a token here so both modes stay coherent. */
+:root {
+  --bg-base: #dde9f5;
+  --panel: rgba(255, 255, 255, 0.6);
+  --panel-edge: rgba(255, 255, 255, 0.9);
+  --panel-solid: #f2f7fc;
+  --inset: rgba(255, 255, 255, 0.62);
+  --ink: #33415e;
+  --ink-2: #5d6d8c;
+  --muted: #8896b0;
+  --accent: #5b4bc4;
+  --accent-bg: #6d5bd0;
+  --coral: #ff6f61;
+  --ok: #16a34a;
+  --warn: #b45309;
+  --bad: #dc2626;
+  --tank-ok: #0d9488;
+  --gauge-ok: #4ade80;      /* green for a dial's number on its dark face */
+  --tank-warn: #d97706;
+  --tank-bad: #dc2626;
+  --ring-track: rgba(51, 65, 94, 0.14);
+  --chip-crit-bg: rgba(220, 38, 38, 0.12);
+  --chip-crit-edge: rgba(220, 38, 38, 0.3);
+  --chip-crit-ink: #b91c1c;
+  --chip-warn-bg: rgba(217, 119, 6, 0.14);
+  --chip-warn-edge: rgba(217, 119, 6, 0.35);
+  --chip-warn-ink: #b45309;
+  --tank-card-bg: linear-gradient(180deg, rgba(190, 227, 248, 0.8), rgba(150, 205, 240, 0.7));
+  --air-card-bg: linear-gradient(160deg, rgba(234, 250, 243, 0.85), rgba(205, 238, 224, 0.85));
+  --tank-ink: #143a55;
+  --wx-sun: #e8a33d;
+  --wx-moon: #64748b;
+  --wx-cloud: #64748b;
+  --wx-cloud-fill: rgba(100, 116, 139, 0.15);
+  --wx-rain: #3b82f6;
+  --wx-snow: #0ea5e9;
+  --wx-ice: #0891b2;
+  --wx-bolt: #d97706;
+  --shadow: 0 10px 28px rgba(90, 120, 160, 0.16);
+}
+
+/* Night mode: sunset→sunrise. Same pastel sea-glass family, dimmed to a
+   dusk tone so the display doesn't glare in a dark room. */
+:root[data-mode='night'] {
+  --bg-base: #9db2cc;
+  --panel: rgba(255, 255, 255, 0.46);
+  --panel-edge: rgba(255, 255, 255, 0.7);
+  --panel-solid: #dde8f3;
+  --inset: rgba(255, 255, 255, 0.46);
+  --ink: #24314c;
+  --ink-2: #4a5a78;
+  --muted: #6d7e9d;
+  --accent: #4f3fb8;
+  --accent-bg: #6152c4;
+  --tank-card-bg: linear-gradient(180deg, rgba(168, 212, 240, 0.78), rgba(124, 186, 228, 0.7));
+  --air-card-bg: linear-gradient(160deg, rgba(196, 230, 214, 0.8), rgba(160, 210, 190, 0.78));
+  --tank-ink: #10314a;
+  --wx-moon: #55637d;
+  --shadow: 0 10px 28px rgba(45, 70, 105, 0.24);
+}
+
+html, body, #root { height: 100%; }
+
+body {
+  background-color: var(--bg-base);
+  background-image:
+    radial-gradient(620px 420px at 12% -6%, rgba(196, 181, 253, 0.4), transparent 62%),
+    radial-gradient(700px 480px at 94% 4%, rgba(165, 210, 250, 0.5), transparent 65%),
+    radial-gradient(640px 440px at 50% 110%, rgba(240, 171, 252, 0.22), transparent 62%),
+    linear-gradient(170deg, #e9f1fa 0%, #dde9f5 55%, #d5e3f2 100%);
+  background-attachment: fixed;
+  color: var(--ink);
+  font-family: 'Outfit', -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+:root[data-mode='night'] body {
+  background-image:
+    radial-gradient(620px 420px at 12% -6%, rgba(167, 139, 250, 0.3), transparent 62%),
+    radial-gradient(700px 480px at 94% 4%, rgba(130, 175, 225, 0.4), transparent 65%),
+    radial-gradient(640px 440px at 50% 110%, rgba(219, 157, 235, 0.18), transparent 62%),
+    linear-gradient(170deg, #adc1d9 0%, #9db2cc 55%, #8ea3c0 100%);
+}
+
+/* Weather glyph colors follow the theme */
+.wxg-sun { stroke: var(--wx-sun); }
+.wxg-moon { stroke: var(--wx-moon); }
+.wxg-cloud { stroke: var(--wx-cloud); }
+.wxg-cloud-fill { stroke: var(--wx-cloud); fill: var(--wx-cloud-fill); }
+.wxg-rain { stroke: var(--wx-rain); }
+.wxg-snow { stroke: var(--wx-snow); }
+.wxg-ice { stroke: var(--wx-ice); }
+.wxg-bolt { fill: var(--wx-bolt); }
+
+.app {
+  position: relative;
+  z-index: 1;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 1.5vh 1.1vw 1.1vw;
+  gap: 1.3vh;
+}
+
+/* ---- Weather condition motion: none, on purpose ----
+   These glyphs live inside the frosted header. Any animation inside a
+   backdrop-filter element makes Chromium re-blur the whole bar every frame,
+   and on the Pi 4 a single fading moon path measured at ~110% of a core in
+   the GPU process. The classes stay on the markup so a faster board could
+   have them back; here they are still. */
+
+/* ---- Frosted glass, without the frost ----
+   The header, cards, panels and ticker used to carry backdrop-filter: blur(18px).
+   Behind them is a smooth gradient, and a blurred gradient is a gradient, so it
+   was invisible — but Chromium re-runs every backdrop blur on every frame that
+   anything on the page moves. Measured on the Pi 4: the home view dropped from
+   85% to 30% of a core in the GPU process with the blurs gone, pixel-identical.
+   Blur stays only where there is real content behind it: .overlay, .osk and
+   and the alert pop-up, all transient. Do not put it back on a resting surface. */
+
+/* ---- Header: no bar. The clock, the tank's name and the buttons sit
+   straight on the backdrop (Scott, 19 Sep 2026: the white box behind them
+   went). The weather chip and the round buttons carry their own pills. ---- */
+.header {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.6vh 1.2vw;
+  overflow: hidden;
+}
+
+.header .clock, .header .header-right { position: relative; z-index: 1; }
+
+.clock { display: flex; align-items: baseline; gap: 1vw; }
+.clock-time {
+  font-size: 5.4vh;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.clock-date { font-size: 2.2vh; color: var(--ink-2); font-weight: 600; }
+
+.header-right { display: flex; align-items: center; gap: 0.8vw; }
+/* The tank's name in the header, lettered like the ReefGauge wordmark:
+   Lilita One (self-hosted, so it survives the Pi being offline), a sea-blue
+   gradient through the glyphs, a white outline round them, a navy edge
+   under that, and a soft drop shadow. Two stacked copies of the text do it
+   - see TankName in App.jsx. Static, so the shadow filter costs one paint. */
+@font-face {
+  font-family: 'Lilita One';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/LilitaOne-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Lilita One';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/LilitaOne-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+.header-tank {
+  position: relative; z-index: 1;
+  flex: 1; min-width: 0;
+  display: grid; place-items: center;
+  font-family: 'Lilita One', 'Outfit', sans-serif;
+  font-size: calc(5.2vh * var(--name-scale, 1));
+  font-weight: 400; letter-spacing: 0.015em;
+  line-height: 1.1;
+  white-space: nowrap; overflow: hidden;
+  padding: 0.4vh 1vw 0.2vh;
+  /* Lilita One has no italic; the wordmark leans, so lean it. */
+  transform: skewX(-6deg);
+}
+.tank-word { grid-area: 1 / 1; }
+.tank-word-edge {
+  color: #0b3f7a;
+  -webkit-text-stroke: 0.26em #0b3f7a;
+  text-shadow: 0 0.08em 0 #072a52, 0.05em 0.12em 0.2em rgba(4, 30, 60, 0.5);
+}
+.tank-word-outline {
+  color: #fff;
+  -webkit-text-stroke: 0.14em #fff;
+}
+.tank-word-fill {
+  background: linear-gradient(180deg, #d9f6ff 0%, #6fd3ff 34%, #1f8cf0 62%, #0a4fc4 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  /* A thin navy edge so the gradient reads on the white outline. */
+  -webkit-text-stroke: 0.02em #0b3f7a;
+}
+
+.photos-btn {
+  background: var(--inset);
+  border: 1px solid var(--panel-edge);
+  border-radius: 50%;
+  width: 5.6vh;
+  height: 5.6vh;
+  cursor: pointer;
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.photos-btn svg { width: 2.7vh; height: 2.7vh; }
+
+/* Current-weather pill: glass, like the rest of the header */
+.weather-now {
+  display: flex;
+  align-items: center;
+  gap: 0.7vw;
+  background: var(--inset);
+  color: var(--ink);
+  border: 1px solid var(--panel-edge);
+  border-radius: 999px;
+  padding: 1vh 1.2vw;
+}
+.weather-now .weather-meta { color: var(--ink-2); }
+.weather-icon { font-size: 3.8vh; line-height: 1; }
+.weather-temp { font-size: 4vh; font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
+.weather-meta { font-size: 1.6vh; color: var(--ink-2); line-height: 1.4; font-weight: 500; }
+
+/* ---- Layout ---- */
+.grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1.12fr 1fr 0.82fr;
+  gap: 1.1vw;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 20px;
+  padding: 1.7vh 1.1vw;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  box-shadow: var(--shadow);
+}
+
+.panel h2 {
+  font-size: 1.9vh;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+  margin-bottom: 1.3vh;
+  display: flex;
+  align-items: baseline;
+  gap: 0.6vw;
+}
+
+.tap-hint { font-size: 1.4vh; font-weight: 500; color: var(--muted); margin-left: auto; }
+
+.left-col, .right-col, .center-col { display: flex; flex-direction: column; gap: 1.3vh; min-height: 0; }
+.left-col .tank-panel { flex: 1; min-height: 0; }
+
+/* ---- Reef tank panel: photoreal animated aquarium + speedometer gauges ---- */
+/* The aquarium (web/public/reef/) fills this via its own scoped .reef rule;
+   this solid color is only a fallback while it loads. */
+.tank-panel {
+  position: relative;
+  overflow: hidden;
+  background: #04141f;
+  border: none;
+}
+.tank-panel h2 { color: #e6f4ff; position: relative; z-index: 2; text-shadow: 0 1px 8px rgba(10, 5, 60, 0.8); }
+.tank-panel .error-note { color: var(--tank-warn); position: relative; z-index: 2; }
+
+/* ---- Speedometer gauges ---- */
+.gauge-grid {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 1.3vh 1vw;
+}
+
+/* Eight distinct glass-tile quadrants over the aquarium. */
+.gauge {
+  background: linear-gradient(165deg, rgba(10, 22, 46, 0.62) 0%, rgba(6, 14, 32, 0.52) 100%);
+  border: 1px solid rgba(180, 215, 255, 0.22);
+  border-radius: 18px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  padding: 1.1vh 0.7vw 0.5vh;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  cursor: pointer;
+}
+.status-low.gauge, .status-warn.gauge { border-color: rgba(255, 209, 102, 0.45); }
+.status-high.gauge { border-color: rgba(255, 123, 114, 0.5); }
+
+.gauge-label {
+  display: flex;
+  justify-content: center;
+  gap: 0.6vw;
+  align-items: center;
+  font-size: 1.9vh;
+  font-weight: 800;
+  color: #e2f0fc;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  flex-shrink: 0;
+  text-shadow: 0 1px 6px rgba(4, 6, 30, 0.95);
+}
+.gauge-flag { font-size: 1.7vh; font-weight: 800; letter-spacing: 0.06em; }
+.status-low .gauge-flag, .status-warn .gauge-flag { color: var(--tank-warn); }
+.status-high .gauge-flag { color: var(--tank-bad); }
+
+.gauge svg { flex: 1; min-height: 0; width: 100%; overflow: visible; }
+
+.gauge-band {
+  fill: none;
+  stroke: url(#gauge-grad);
+  stroke-width: 11;
+  stroke-linecap: round;
+}
+
+.gauge-tick { stroke: rgba(255, 255, 255, 0.85); stroke-width: 0.9; }
+.gauge-tick.major { stroke: #ffffff; stroke-width: 1.5; }
+
+.gauge-needle { fill: #ffffff; }
+.gauge-hub { fill: #ffffff; }
+
+.gauge-value {
+  fill: #ffffff;
+  font-size: 21px;
+  font-weight: 800;
+  text-anchor: middle;
+  font-variant-numeric: tabular-nums;
+  filter: drop-shadow(0 1px 4px rgba(4, 6, 30, 0.95));
+}
+.status-ok .gauge-value { fill: var(--gauge-ok); }
+.status-low .gauge-value, .status-warn .gauge-value { fill: var(--tank-warn); }
+.status-high .gauge-value { fill: var(--tank-bad); }
+/* ICP meters colour by how far out, not which way */
+.icp-meter.sev-ok .gauge-value { fill: var(--gauge-ok); }
+.icp-meter.sev-warn .gauge-value { fill: var(--tank-warn); }
+.icp-meter.sev-crit .gauge-value { fill: var(--tank-bad); }
+.icp-meter.sev-warn.gauge { border-color: rgba(255, 209, 102, 0.45); }
+.icp-meter.sev-crit.gauge { border-color: rgba(255, 123, 114, 0.5); }
+.trend-current.sev-ok { color: var(--tank-ok); }
+.trend-current.sev-warn { color: var(--tank-warn); }
+.trend-current.sev-crit { color: var(--tank-bad); }
+
+.gauge-sub {
+  fill: rgba(226, 240, 252, 0.9);
+  font-size: 8.5px;
+  font-weight: 700;
+  text-anchor: middle;
+  letter-spacing: 0.04em;
+  filter: drop-shadow(0 1px 3px rgba(4, 6, 30, 0.95));
+}
+
+/* ---- Trend overlay ---- */
+.trend-view {
+  background: linear-gradient(180deg, #101540 0%, #0c1132 100%);
+  border: 1px solid rgba(140, 180, 255, 0.2);
+  border-radius: 22px;
+  box-shadow: 0 20px 60px rgba(5, 10, 30, 0.6);
+  width: 92vw;
+  max-height: 90vh;
+  padding: 2.2vh 1.6vw;
+  display: flex;
+  flex-direction: column;
+  color: #e8f1fb;
+}
+
+.trend-title { display: flex; align-items: baseline; gap: 1vw; }
+.trend-name { font-size: 3vh; font-weight: 800; }
+.trend-current { font-size: 2.6vh; font-weight: 800; font-variant-numeric: tabular-nums; }
+.trend-current.status-ok { color: var(--tank-ok); }
+.trend-current.status-low, .trend-current.status-warn { color: var(--tank-warn); }
+.trend-current.status-high { color: var(--tank-bad); }
+.trend-target { font-size: 1.7vh; color: #8fa8c8; font-weight: 600; }
+
+.trend-window {
+  background: rgba(255, 255, 255, 0.07) !important;
+  border: 1px solid rgba(140, 180, 255, 0.25) !important;
+  color: #cfe0f5 !important;
+  font-size: 1.8vh !important;
+}
+.trend-window.active {
+  background: var(--accent-bg) !important;
+  border-color: var(--accent-bg) !important;
+  color: #fff !important;
+}
+
+.trend-chart { width: 100%; flex: 1; min-height: 0; touch-action: none; }
+
+.trend-band { fill: rgba(61, 220, 151, 0.1); }
+.trend-band-edge { stroke: rgba(61, 220, 151, 0.45); stroke-width: 1; stroke-dasharray: 5 5; }
+.trend-grid { stroke: rgba(160, 190, 230, 0.1); stroke-width: 1; }
+.trend-tick-y { fill: #8fa8c8; font-size: 12px; text-anchor: end; font-variant-numeric: tabular-nums; }
+.trend-tick-x { fill: #8fa8c8; font-size: 12px; text-anchor: middle; }
+.trend-line { fill: none; stroke: #4cc3f7; stroke-width: 2.5; stroke-linejoin: round; }
+.trend-cross { stroke: rgba(255, 255, 255, 0.35); stroke-width: 1; stroke-dasharray: 4 4; }
+.trend-dot { fill: #4cc3f7; stroke: #fff; stroke-width: 2; }
+.trend-hover-label { fill: #fff; font-size: 14px; font-weight: 700; text-anchor: middle; }
+.trend-empty { fill: #8fa8c8; font-size: 16px; text-anchor: middle; }
+
+.trend-stats {
+  display: flex;
+  gap: 2.4vw;
+  padding-top: 1.4vh;
+  font-size: 1.9vh;
+  color: #8fa8c8;
+}
+.trend-stats b { color: #fff; font-variant-numeric: tabular-nums; }
+.trend-slope { font-weight: 800; color: #cfe0f5; }
+.trend-slope.rising { color: var(--tank-warn); }
+.trend-slope.falling { color: var(--tank-warn); }
+
+/* ---- Tiles ---- */
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.1vh 0.7vw;
+  position: relative;
+  z-index: 1;
+}
+
+.env-grid { grid-template-columns: repeat(3, 1fr); }
+
+.tile {
+  position: relative;
+  background: var(--inset);
+  border: 1px solid var(--panel-edge);
+  border-radius: 14px;
+  padding: 1.2vh 0.9vw 1.1vh;
+  overflow: hidden;
+}
+
+.tile::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 14%; bottom: 14%;
+  width: 5px;
+  border-radius: 0 5px 5px 0;
+  background: var(--muted);
+  opacity: 0.5;
+}
+.tile.status-ok::before { background: var(--ok); opacity: 1; }
+.tile.status-low::before, .tile.status-warn::before { background: var(--warn); opacity: 1; }
+.tile.status-high::before { background: var(--bad); opacity: 1; }
+
+.tile-label {
+  font-size: 1.5vh;
+  font-weight: 600;
+  color: var(--ink-2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.3vw;
+}
+
+.tile-flag { font-size: 1.35vh; font-weight: 800; letter-spacing: 0.06em; }
+.status-low .tile-flag, .status-warn .tile-flag { color: var(--warn); }
+.status-high .tile-flag { color: var(--bad); }
+
+.tile-value {
+  font-size: 3.5vh;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+.tile-unit { font-size: 1.6vh; font-weight: 600; color: var(--muted); margin-left: 0.3em; }
+.tile-range { font-size: 1.35vh; color: var(--muted); }
+
+.error-note { margin-top: 1vh; color: var(--warn); font-size: 1.6vh; }
+.empty-note { color: var(--muted); font-size: 1.8vh; padding: 1vh 0; list-style: none; }
+
+/* ---- Forecast panel: glass, like the rest of the terminal ---- */
+.forecast-panel {
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--panel-edge);
+}
+.forecast-panel h2 { color: var(--ink); }
+
+.forecast { display: flex; flex-direction: column; gap: 0.65vh; }
+
+.forecast-day {
+  display: grid;
+  grid-template-columns: 3.6em 2.2em 3em 1fr;
+  align-items: center;
+  font-size: 1.95vh;
+}
+
+.forecast-name { color: var(--ink-2); font-weight: 600; }
+.forecast-icon { display: inline-flex; align-items: center; }
+.forecast-precip { color: var(--accent); font-size: 1.55vh; font-weight: 700; font-variant-numeric: tabular-nums; }
+.forecast-temps { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.forecast-temps b { color: var(--ink); font-weight: 800; }
+
+.forecast-panel { cursor: pointer; }
+.mood-hint { color: var(--muted); }
+
+/* ---- Radar ---- */
+.radar-view {
+  background: var(--panel-solid);
+  border-radius: 22px;
+  box-shadow: 0 20px 60px rgba(10, 30, 50, 0.35);
+  width: 94vw;
+  height: 92vh;
+  padding: 2vh 1.4vw;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.radar-frame {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: none;
+  border-radius: 14px;
+  background: var(--inset);
+}
+
+/* ---- Overlays (month view, photo manager) ---- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 40, 60, 0.45);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+
+/* ---- Full-screen dialogs (photo manager and friends) ---- */
+.photo-manager {
+  background: var(--panel-solid);
+  border-radius: 22px;
+  box-shadow: 0 20px 60px rgba(10, 30, 50, 0.35);
+  width: 94vw;
+  height: 92vh;
+  padding: 2vh 1.4vw;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.month-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1vw;
+  margin-bottom: 1.4vh;
+}
+
+.month-title { font-size: 3.2vh; font-weight: 800; }
+
+.month-nav { display: flex; flex-direction: row; align-items: center; gap: 0.9vw; }
+
+.month-nav button {
+  background: var(--inset);
+  border: 1px solid var(--panel-edge);
+  border-radius: 12px;
+  color: var(--ink);
+  font-size: 2.6vh;
+  min-width: 6vh;
+  height: 5.4vh;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 0 1.2vh;
+}
+.month-close { background: var(--coral) !important; color: #fff !important; border: none !important; }
+
+/* ---- Photo manager ---- */
+.photo-hint { font-size: 1.8vh; color: var(--ink-2); margin-bottom: 1.4vh; }
+
+.photo-grid {
+  overflow-y: auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(22vh, 1fr));
+  gap: 1vh;
+}
+
+.photo-thumb {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+  background: var(--inset);
+}
+.photo-thumb img { width: 100%; height: 100%; object-fit: cover; }
+
+.photo-delete {
+  position: absolute;
+  top: 0.6vh;
+  right: 0.6vh;
+  background: rgba(20, 30, 40, 0.65);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 3.4vh;
+  height: 3.4vh;
+  font-size: 1.7vh;
+  cursor: pointer;
+}
+
+/* ---- Idle slideshow ---- */
+.slideshow {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  z-index: 30;
+}
+.slideshow img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  animation: slidefade 1.2s ease;
+}
+@keyframes slidefade { from { opacity: 0; } to { opacity: 1; } }
+
+.slideshow-clock {
+  position: absolute;
+  bottom: 3vh;
+  right: 3vw;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 5vh;
+  font-weight: 700;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- On-screen keyboard ---- */
+.osk {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 25;
+  background: rgba(16, 21, 36, 0.96);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid var(--panel-edge);
+  padding: 1.2vh 6vw calc(1.4vh + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 0.9vh;
+}
+
+.osk-row { display: flex; justify-content: center; gap: 0.5vw; }
+
+.osk-key {
+  flex: 1;
+  max-width: 8vw;
+  height: 6.4vh;
+  font-size: 2.6vh;
+  font-weight: 600;
+  color: #eef3fb;
+  background: #232b42;
+  border: 1px solid #333d5c;
+  border-radius: 10px;
+  cursor: pointer;
+  /* No text-transform: the key must show the character it actually types,
+     now that Shift picks the case. */
+}
+.osk-key:active { background: #3a4568; }
+
+.osk-space { max-width: 26vw; flex: 4; font-size: 2vh; }
+.osk-add { max-width: 14vw; flex: 2; background: var(--coral); border-color: var(--coral); }
+.osk-close { max-width: 8vw; background: #182036; }
+.osk-mod { max-width: 11vw; flex: 1.4; font-size: 2vh; font-weight: 700; }
+.osk-mod.active { background: var(--accent-bg); border-color: var(--accent-bg); color: #fff; }
+
+/* ---- Setup wizard (first boot / ⚙️) ---- */
+.setup {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: linear-gradient(170deg, #0a4b7c 0%, #0b6a8e 55%, #0e8a92 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.setup-card {
+  user-select: none;
+  -webkit-user-select: none;
+  position: relative;
+  background: var(--panel-solid);
+  color: var(--ink);
+  border-radius: 24px;
+  box-shadow: 0 24px 70px rgba(4, 20, 35, 0.5);
+  width: min(88vw, 900px);
+  max-height: 92vh;
+  padding: 3vh 3vw;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.setup-progress {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 2.5vh;
+}
+.setup-dot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5vh;
+  flex: 1;
+}
+.setup-dot span {
+  width: 4.2vh;
+  height: 4.2vh;
+  border-radius: 50%;
+  background: var(--inset);
+  border: 2px solid var(--panel-edge);
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 1.8vh;
+}
+.setup-dot em { font-style: normal; font-size: 1.3vh; color: var(--muted); font-weight: 600; }
+.setup-dot.active span { border-color: var(--accent); color: var(--accent); }
+.setup-dot.active em { color: var(--accent); }
+.setup-dot.done span { background: var(--ok); border-color: var(--ok); color: #fff; }
+
+.setup-body { display: flex; flex-direction: column; gap: 1.6vh; align-items: stretch; }
+.setup-hero { font-size: 8vh; text-align: center; }
+.setup-body h1 { font-size: 3.4vh; font-weight: 800; text-align: center; }
+.setup-body p { font-size: 2vh; color: var(--ink-2); text-align: center; line-height: 1.5; }
+.setup-ok { color: var(--ok) !important; font-weight: 700; }
+.setup-note { color: var(--muted); font-size: 1.9vh; text-align: center; padding: 1vh; }
+
+.setup-primary {
+  background: var(--coral);
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  font-size: 2.4vh;
+  font-weight: 800;
+  padding: 2vh;
+  cursor: pointer;
+}
+.setup-primary:disabled { opacity: 0.45; cursor: default; }
+.setup-primary.compact { padding: 1.4vh 2vw; font-size: 2vh; flex-shrink: 0; }
+
+.setup-skip {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1.9vh;
+  font-weight: 600;
+  padding: 0.8vh;
+  cursor: pointer;
+}
+
+.setup-back {
+  position: absolute;
+  top: 2vh;
+  left: 1.5vw;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 2.2vh;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.setup-list { display: flex; flex-direction: column; gap: 0.8vh; max-height: 34vh; overflow-y: auto; }
+
+.setup-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--inset);
+  border: 2px solid var(--panel-edge);
+  border-radius: 12px;
+  color: var(--ink);
+  font-size: 2.2vh;
+  font-weight: 600;
+  padding: 1.6vh 1.4vw;
+  cursor: pointer;
+  text-align: left;
+}
+.setup-row.selected { border-color: var(--accent); }
+.setup-row-meta { color: var(--muted); font-size: 1.8vh; }
+
+.setup-input {
+  background: var(--inset);
+  border: 2px solid var(--panel-edge);
+  border-radius: 12px;
+  color: var(--ink);
+  font-size: 2.2vh;
+  padding: 1.7vh 1.2vw;
+  outline: none;
+  width: 100%;
+}
+.setup-input.focused { border-color: var(--accent); }
+.setup-input::placeholder { color: var(--muted); }
+
+.setup-inline { display: flex; gap: 0.8vw; }
+
+.setup-params {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1vh 0.8vw;
+}
+.setup-param {
+  background: var(--inset);
+  border-radius: 12px;
+  padding: 1.2vh;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+}
+.setup-param b { font-size: 2.6vh; }
+.setup-param span { font-size: 1.5vh; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+
+.setup-summary { display: flex; flex-direction: column; gap: 1.2vh; font-size: 2.2vh; color: var(--ink-2); }
+.setup-summary b { color: var(--ink); }
+
+.setup-qr-row {
+  display: flex;
+  gap: 1.5vw;
+  align-items: center;
+  background: var(--inset);
+  border-radius: 14px;
+  padding: 1.4vh 1.2vw;
+}
+.setup-qr {
+  width: clamp(150px, 15vh, 220px);
+  height: clamp(150px, 15vh, 220px);
+  flex-shrink: 0;
+  background: #fff;
+  border-radius: 10px;
+  padding: 0.8vh;
+}
+.setup-qr svg { width: 100%; height: 100%; display: block; }
+.setup-qr-text { font-size: 1.75vh; color: var(--ink-2); line-height: 1.55; text-align: left; }
+.setup-note-inline { color: var(--accent); font-weight: 700; }
+
+/* Wizard icons sit on the text baseline at the surrounding font size */
+.ico { vertical-align: -0.125em; flex-shrink: 0; }
+.setup-hero svg { width: 8vh; height: 8vh; }
+.setup-summary div { display: flex; align-items: center; gap: 0.6vw; }
+
+/* Equipment step: one row per Red Sea device */
+.gear-row {
+  display: flex;
+  align-items: center;
+  gap: 0.8vw;
+  background: var(--inset);
+  border: 2px solid var(--panel-edge);
+  border-radius: 12px;
+  padding: 1vh 1.2vw;
+}
+.gear-row.is-off { opacity: 0.5; }
+
+.gear-check {
+  width: 4.2vh;
+  height: 4.2vh;
+  flex-shrink: 0;
+  border-radius: 10px;
+  border: 2px solid var(--muted);
+  background: none;
+  color: #fff;
+  font-size: 2.2vh;
+  font-weight: 800;
+  cursor: pointer;
+}
+.gear-row:not(.is-off) .gear-check { background: var(--ok); border-color: var(--ok); }
+
+.gear-name { flex: 1; min-width: 0; padding: 1.1vh 0.8vw !important; font-size: 2vh !important; }
+.gear-meta { font-size: 1.6vh; color: var(--muted); white-space: nowrap; }
+
+.setup-error {
+  margin-top: 1.5vh;
+  background: rgba(220, 38, 38, 0.12);
+  border: 1px solid var(--bad);
+  color: var(--bad);
+  border-radius: 12px;
+  padding: 1.4vh;
+  font-size: 1.9vh;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* ---- 10" home screen: large tappable summary cards ---- */
+.body-area { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+.home-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 1.4vh 0.9vw;
+}
+/* The right-hand column: weather (tallest - it carries the day's range and
+   the hourly strip), room air (shortest), the written history. */
+.home-side { display: flex; flex-direction: column; gap: 1.4vh; min-height: 0; }
+.home-side > .home-card { flex: 1; min-height: 0; }
+.home-side > .weather-card { flex: 1.12; }
+.home-side > .air-card { flex: 0.74; }
+.home-side > .log-card { flex: 1.3; }
+
+.home-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1vh;
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+  color: var(--ink);
+  padding: 1.8vh 1.2vw;
+  cursor: pointer;
+  overflow: hidden;
+  min-height: 0;
+}
+.home-card:active { border-color: var(--accent); }
+
+.hc-head { display: flex; align-items: center; gap: 0.6vw; min-width: 0; position: relative; }
+.hc-ico { display: inline-flex; color: var(--ink); flex-shrink: 0; }
+.hc-ico svg { width: 2.4vh; height: 2.4vh; }
+.hc-title { font-size: 2.7vh; font-weight: 800; }
+
+.hc-chip {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4vw;
+  padding: 0.5vh 1vw;
+  border-radius: 999px;
+  font-size: 1.7vh;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.hc-chip svg { width: 1.6vh; height: 1.6vh; }
+.chip-crit { background: var(--chip-crit-bg); border: 1px solid var(--chip-crit-edge); color: var(--chip-crit-ink); }
+.chip-warn { background: var(--chip-warn-bg); border: 1px solid var(--chip-warn-edge); color: var(--chip-warn-ink); }
+
+/* Ring gauges on the reef card: two columns, four deep, a day-line each */
+.hc-gauges {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  gap: 0.7vh 0.6vw;
+  position: relative;
+}
+.hc-gauge {
+  display: flex;
+  align-items: center;
+  gap: 0.7vw;
+  padding: 0.7vh 0.6vw;
+  border-radius: 15px;
+  background: var(--inset);
+  border: 1px solid var(--panel-edge);
+  min-height: 0;
+  min-width: 0;
+}
+.hc-ring { height: 100%; max-height: 10.4vh; aspect-ratio: 1; flex-shrink: 0; }
+.hc-ring-track { stroke: var(--ring-track); }
+.hc-ring-prog.rs-ok { stroke: var(--tank-ok); }
+.hc-ring-prog.rs-warn { stroke: var(--tank-warn); }
+.hc-ring-prog.rs-crit { stroke: var(--tank-bad); }
+.hc-ring-val { fill: var(--ink); font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.hc-ring-unit { fill: var(--ink-2); font-size: 9.5px; font-weight: 600; }
+.hc-gauge-info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 0.25vh; }
+.hc-gauge-name { font-size: 2.6vh; font-weight: 800; color: var(--ink); letter-spacing: -0.01em; }
+.hc-gauge-status { font-size: 2vh; color: var(--ink-2); font-weight: 600; display: flex; align-items: center; gap: 0.3vw; }
+.hc-gauge-status.is-warn { color: var(--warn); font-weight: 700; }
+.hc-gauge-status.is-crit { color: var(--bad); font-weight: 700; }
+.hc-gauge-range { font-size: 1.5vh; color: var(--muted); }
+
+/* The last day as a line, the target band behind it. A picture, not an animation. */
+.hc-spark { width: 100%; height: 2.6vh; display: block; overflow: visible; }
+.hc-spark-band { fill: rgba(13, 148, 136, 0.13); }
+.hc-spark-line { stroke: var(--tank-ok); stroke-width: 1.6px; stroke-linejoin: round; stroke-linecap: round; }
+.hc-spark-dot { stroke: var(--tank-ok); stroke-width: 5px; stroke-linecap: round; fill: none; }
+.hc-spark.is-warn .hc-spark-line, .hc-spark.is-warn .hc-spark-dot { stroke: var(--tank-warn); }
+.hc-spark.is-crit .hc-spark-line, .hc-spark.is-crit .hc-spark-dot { stroke: var(--tank-bad); }
+
+/* Room air: short card, the CO2 number leads */
+.air-card { background: var(--air-card-bg); }
+.air-card.is-warn { border-color: var(--warn); }
+.air-card.is-crit { border-color: var(--bad); }
+/* Stale: keep the last numbers legible but plainly past - dimmed, on the
+   panel's own ground rather than the air card's green tint. */
+.air-card.is-stale { background: var(--panel); border-style: dashed; border-color: var(--panel-edge); }
+.air-card.is-stale .air-big, .air-card.is-stale .air-meta { color: var(--muted); }
+.air-card.is-stale .air-big small { color: var(--muted); }
+.air-stale { margin-top: auto; font-size: 1.8vh; font-weight: 600; color: var(--muted); line-height: 1.3; }
+.air-main { display: flex; align-items: baseline; gap: 1vw; min-height: 0; }
+.air-big { font-size: 5.6vh; font-weight: 800; line-height: 1; letter-spacing: -0.02em; }
+.air-big small { font-size: 1.8vh; font-weight: 600; color: var(--muted); margin-left: 0.4vw; letter-spacing: 0; }
+.air-meta { display: flex; gap: 1vw; font-size: 2.1vh; font-weight: 700; color: var(--ink-2); }
+.air-card .hc-spark { height: 3vh; margin-top: auto; }
+.chip-ok { background: rgba(13, 148, 136, 0.12); border: 1px solid rgba(13, 148, 136, 0.3); color: var(--tank-ok); }
+/* No reading: grey, not green. A stale card must not look like a healthy one. */
+.chip-stale { background: var(--inset); border: 1px solid var(--panel-edge); color: var(--muted); }
+
+.hc-substats {
+  display: flex;
+  align-items: center;
+  gap: 0.9vw;
+  padding-top: 1vh;
+  border-top: 1px solid var(--panel-edge);
+  font-size: 1.9vh;
+  color: var(--ink-2);
+  position: relative;
+}
+.hc-substat em { font-style: normal; color: var(--muted); }
+.hc-substat.is-warn { color: var(--warn); font-weight: 700; }
+.hc-substat.is-crit { color: var(--bad); font-weight: 700; }
+.hc-status { font-size: 3.1vh; font-weight: 800; line-height: 1.25; }
+.hc-status.ok { color: var(--ok); }
+.hc-status.warn { color: var(--warn); }
+.hc-status.bad { color: var(--bad); }
+.hc-big { font-size: 7vh; font-weight: 800; line-height: 1; }
+.hc-big small { font-size: 2.2vh; font-weight: 600; color: var(--muted); margin-left: 0.4vw; }
+.hc-row { display: flex; gap: 1.4vw; font-size: 2.7vh; font-weight: 700; color: var(--ink-2); margin-top: auto; }
+.hc-muted { color: var(--muted); font-size: 2.4vh; font-weight: 600; }
+.hc-line { font-size: 2.6vh; font-weight: 700; }
+.hc-line-2 { color: var(--ink-2); font-weight: 600; font-size: 2.3vh; }
+.hc-media { display: flex; gap: 0.9vw; align-items: center; min-width: 0; }
+.hc-media-info { min-width: 0; }
+.bad-txt { color: var(--bad); }
+.warn-txt { color: var(--warn); }
+
+/* ---- Reef card: the left two-thirds ---- */
+.tank-card {
+  position: relative;
+  background: var(--tank-card-bg);
+  border-color: var(--panel-edge);
+  color: var(--tank-ink);
+}
+.tank-card.warn { border-color: var(--warn); }
+
+/* A critical reading used to brighten the entire card once a second — the
+   water flashed from blue to near-white, which read as a broken screen rather
+   than as an alarm, and made the one card you want to be able to look at the
+   hardest one to look at. The alarm belongs in the border. The water goes on
+   being water.
+ *
+ * The ring is drawn as an overlay rather than as a thicker `border`, because a
+ * border of this weight would shrink the content box and shift every gauge
+ * inside the card the moment a parameter went critical. */
+.tank-card.crit { border-color: var(--bad); }
+.tank-card.crit::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 0.62vh solid var(--bad);
+  border-radius: inherit;
+  box-shadow: 0 0 2.6vh rgba(220, 38, 38, 0.5), inset 0 0 1.6vh rgba(220, 38, 38, 0.35);
+  pointer-events: none;
+  z-index: 2;
+  animation: crit-ring 2.6s ease-in-out infinite alternate;
+}
+/* Only the ring breathes, and slowly: enough to catch the eye crossing the
+   room, not enough to strobe the room it is crossing. */
+@keyframes crit-ring {
+  from { opacity: 0.72; }
+  to { opacity: 1; }
+}
+
+.hc-content { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 1vh; flex: 1; min-height: 0; }
+
+.tank-ok-badge {
+  font-size: 3.6vh;
+  font-weight: 800;
+  color: var(--ok);
+  margin: auto 0;
+}
+
+.tank-crit-vals { display: flex; gap: 1vw; margin: auto 0; min-width: 0; }
+.tank-crit {
+  background: rgba(6, 30, 58, 0.55);
+  border: 2px solid var(--warn);
+  border-radius: 12px;
+  padding: 0.9vh 0.9vw;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.tank-crit.is-crit { border-color: var(--bad); }
+.tank-crit-label {
+  font-size: 1.9vh;
+  font-weight: 800;
+  color: var(--warn);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+.tank-crit.is-crit .tank-crit-label { color: #ff9b94; }
+.tank-crit-value { font-size: 4.4vh; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.tank-crit-value em { font-style: normal; font-size: 2vh; font-weight: 600; color: rgba(255, 255, 255, 0.7); margin-left: 0.3vw; }
+.tank-crit-more { align-self: flex-end; font-size: 2vh; font-weight: 700; color: rgba(255, 255, 255, 0.8); }
+
+.ocean-bg { position: absolute; inset: 0; overflow: hidden; pointer-events: none; border-radius: inherit; }
+
+.ocean-bg .wave {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 200%;
+  animation: wave-drift linear infinite;
+}
+.wave1 { height: 34%; animation-duration: 7s; }
+.wave2 { height: 46%; animation-duration: 11s; animation-direction: reverse; }
+.wave3 { height: 60%; animation-duration: 17s; }
+@keyframes wave-drift {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+/* Drift alone is a picture of a wave being slid sideways. Water also rises and
+   falls, so the path inside each wave swells on its own clock — a different
+   element from the one doing the drifting, because two animations on one
+   element's transform would simply overwrite each other. The periods are
+   deliberately unrelated (5.5s, 7.3s, 9.7s against 7s, 11s, 17s of drift) so
+   the layers never resynchronise into a single visible beat. */
+.ocean-bg .wave path {
+  transform-origin: 50% 100%;
+  animation: wave-swell ease-in-out infinite alternate;
+}
+.wave1 path { animation-duration: 5.5s; }
+.wave2 path { animation-duration: 7.3s; animation-delay: -2.1s; }
+.wave3 path { animation-duration: 9.7s; animation-delay: -4.4s; }
+@keyframes wave-swell {
+  from { transform: translateY(2px) scaleY(0.96); }
+  to { transform: translateY(-3px) scaleY(1.06); }
+}
+
+/* Light moving across water. A wide, very soft band that crosses slowly and
+   never brightens any one spot much — the opposite of the flash it replaces. */
+.ocean-bg::after {
+  content: '';
+  position: absolute;
+  inset: -20% -60%;
+  background: linear-gradient(102deg, transparent 34%, rgba(255, 255, 255, 0.16) 50%, transparent 66%);
+  animation: ocean-sheen 19s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes ocean-sheen {
+  0% { transform: translateX(-38%); }
+  50% { transform: translateX(38%); }
+  100% { transform: translateX(-38%); }
+}
+
+.bubble {
+  position: absolute;
+  bottom: -2vh;
+  width: 1.3vh;
+  height: 1.3vh;
+  border-radius: 50%;
+  background: rgba(220, 245, 255, 0.55);
+  animation: bubble-rise 7s ease-in infinite;
+}
+.b1 { left: 18%; animation-delay: 0s; }
+.b2 { left: 42%; width: 0.9vh; height: 0.9vh; animation-delay: 2.4s; animation-duration: 6s; }
+.b3 { left: 66%; animation-delay: 4s; }
+.b4 { left: 84%; width: 1.7vh; height: 1.7vh; animation-delay: 1.2s; animation-duration: 8.5s; }
+@keyframes bubble-rise {
+  0% { transform: translateY(0); opacity: 0; }
+  12% { opacity: 0.7; }
+  85% { opacity: 0.5; }
+  100% { transform: translateY(-22vh); opacity: 0; }
+}
+
+.ocean-fish {
+  position: absolute;
+  bottom: 34%;
+  left: -12%;
+  font-size: 3vh;
+  animation: fish-swim 16s linear infinite;
+  filter: drop-shadow(0 1px 3px rgba(4, 30, 60, 0.6));
+}
+@keyframes fish-swim {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(9vw, -1.6vh); }
+  50% { transform: translate(18vw, 0.6vh); }
+  75% { transform: translate(27vw, -1vh); }
+  100% { transform: translate(38vw, 0); }
+}
+/* ---- Weather card: the whole card wears the current conditions ----
+   Each mood supplies a pastel pair; the card paints that gradient over the
+   glass panel, so it stays part of the sea-glass family instead of becoming
+   a saturated block. --wx-alpha keeps the same hues quieter after sunset. */
+.weather-card {
+  gap: 0.8vh;
+  background-image: linear-gradient(155deg, var(--wx-from, transparent), var(--wx-to, transparent));
+  background-color: var(--panel);
+}
+
+:root { --wx-alpha: 0.82; }
+:root[data-mode='night'] { --wx-alpha: 0.5; }
+
+/* The cool moods sit close to the sea-glass background, so they carry more
+   pigment than the warm ones or they read as an untinted card. */
+.wx-sunny      { --wx-from: rgba(255, 240, 186, var(--wx-alpha)); --wx-to: rgba(255, 206, 155, var(--wx-alpha)); --wx-glow: rgba(251, 191, 36, 0.45); }
+.wx-hot        { --wx-from: rgba(255, 214, 182, var(--wx-alpha)); --wx-to: rgba(255, 172, 156, var(--wx-alpha)); --wx-glow: rgba(248, 140, 110, 0.42); }
+.wx-cloudy     { --wx-from: rgba(214, 228, 243, var(--wx-alpha)); --wx-to: rgba(180, 200, 225, var(--wx-alpha)); --wx-glow: rgba(148, 163, 184, 0.34); }
+.wx-rain       { --wx-from: rgba(198, 221, 245, var(--wx-alpha)); --wx-to: rgba(160, 192, 230, var(--wx-alpha)); --wx-glow: rgba(96, 165, 250, 0.38); }
+.wx-storm      { --wx-from: rgba(205, 203, 234, var(--wx-alpha)); --wx-to: rgba(160, 161, 204, var(--wx-alpha)); --wx-glow: rgba(129, 140, 248, 0.40); }
+.wx-snow       { --wx-from: rgba(228, 243, 255, var(--wx-alpha)); --wx-to: rgba(188, 219, 243, var(--wx-alpha)); --wx-glow: rgba(191, 219, 254, 0.42); }
+.wx-cold       { --wx-from: rgba(208, 236, 250, var(--wx-alpha)); --wx-to: rgba(168, 212, 239, var(--wx-alpha)); --wx-glow: rgba(125, 211, 252, 0.38); }
+.wx-fog        { --wx-from: rgba(224, 227, 233, var(--wx-alpha)); --wx-to: rgba(188, 195, 207, var(--wx-alpha)); --wx-glow: rgba(203, 213, 225, 0.32); }
+.wx-clearnight { --wx-from: rgba(210, 210, 246, var(--wx-alpha)); --wx-to: rgba(172, 178, 229, var(--wx-alpha)); --wx-glow: rgba(129, 140, 248, 0.34); }
+
+.wx-tint {
+  position: absolute;
+  top: -6vh;
+  right: -3vw;
+  width: 18vw;
+  height: 22vh;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--wx-glow, rgba(148, 163, 184, 0.35)), transparent);
+  pointer-events: none;
+}
+
+/* Slots sit on a tinted card now, so they need a touch more white to read. */
+.weather-card .wx-slot { background: rgba(255, 255, 255, 0.55); border-color: rgba(255, 255, 255, 0.75); }
+:root[data-mode='night'] .weather-card .wx-slot { background: rgba(255, 255, 255, 0.4); }
+
+.wx-main { display: flex; align-items: center; gap: 0.8vw; position: relative; min-width: 0; }
+.wx-temp { font-size: 5.6vh; font-weight: 300; line-height: 1; }
+.wx-meta { flex: 1; min-width: 0; font-size: 1.9vh; color: var(--ink-2); }
+.wx-meta .wx-hl { color: var(--muted); font-size: 1.8vh; }
+.wx-hero { flex-shrink: 0; display: inline-flex; }
+.wx-hero svg { width: 6.4vh; height: 6.4vh; }
+
+.wx-strip { display: flex; gap: 0.4vw; position: relative; margin-top: auto; }
+.wx-slot {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3vh;
+  padding: 0.7vh 0;
+  border-radius: 12px;
+  background: var(--inset);
+  border: 1px solid var(--panel-edge);
+  min-width: 0;
+}
+.wx-slot em { font-style: normal; font-size: 1.5vh; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.wx-slot b { font-size: 1.7vh; font-weight: 700; }
+.wx-slot svg { width: 2.6vh; height: 2.6vh; }
+
+/* ---- Detail views ---- */
+.view { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 1.2vh; }
+
+.view-bar { display: flex; align-items: center; gap: 1vw; }
+
+.view-back {
+  background: var(--panel);
+  border: 2px solid var(--panel-edge);
+  border-radius: 12px;
+  color: var(--ink);
+  font-size: 2.6vh;
+  font-weight: 800;
+  padding: 1.3vh 1.8vw;
+  cursor: pointer;
+}
+.view-title { font-size: 2.9vh; font-weight: 800; flex: 1; }
+.view-action { display: flex; gap: 0.6vw; }
+
+.view-btn {
+  background: var(--accent-bg);
+  border: none;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 2.3vh;
+  font-weight: 800;
+  padding: 1.3vh 1.8vw;
+  cursor: pointer;
+}
+
+.view-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.view-body > .panel { flex: 1; min-height: 0; }
+.view-fill { overflow-y: auto; scrollbar-width: none; }
+.view-fill::-webkit-scrollbar { display: none; }
+.view-tank .view-body { display: flex; flex-direction: column; min-height: 0; }
+.view-tank-panel { flex: 1; min-height: 0; }
+
+/* Bigger type inside detail views (10" readability) */
+.view .forecast-day { font-size: 3vh; grid-template-columns: 4em 2.2em 3.4em 1fr; }
+.view .forecast { gap: 1.4vh; }
+.view .maint-row { font-size: 2.4vh; padding: 1.2vh 0; }
+.view .maint-due { font-size: 2.1vh; }
+.view .maint-done { width: 4.6vh; height: 4.6vh; font-size: 2.3vh; }
+.view .tile-value { font-size: 4.5vh; }
+.view .tile-label { font-size: 2vh; }
+
+/* ---- Red Sea equipment strip (Tank view) ---- */
+.rs-strip {
+  flex-shrink: 0;
+  display: flex;
+  gap: 0.8vw;
+  margin-top: 1.2vh;
+}
+
+.rs-card {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7vh;
+  padding: 1.2vh 1vw;
+  border-radius: 16px;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  box-shadow: var(--shadow);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.rs-card.rs-warn { border-color: var(--warn); }
+.rs-card.rs-bad { border-color: var(--bad); }
+
+.rs-head { display: flex; align-items: center; gap: 0.6vw; min-width: 0; }
+.rs-ico { display: inline-flex; color: var(--accent); flex-shrink: 0; }
+.rs-ico svg { width: 2.4vh; height: 2.4vh; }
+.rs-name { font-size: 2vh; font-weight: 700; }
+.rs-headline { margin-left: auto; font-size: 1.6vh; color: var(--muted); white-space: nowrap; }
+
+.rs-metrics { display: flex; flex-wrap: wrap; gap: 0.4vh 0.8vw; }
+.rs-metric { display: flex; align-items: baseline; gap: 0.3vw; font-size: 1.7vh; min-width: 0; }
+.rs-metric em { font-style: normal; color: var(--muted); }
+.rs-metric b { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.rs-alert {
+  display: flex;
+  align-items: center;
+  gap: 0.4vw;
+  font-size: 1.6vh;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.rs-alert svg { width: 1.8vh; height: 1.8vh; flex-shrink: 0; }
+.rs-alert.is-warn { color: var(--warn); }
+.rs-alert.is-bad { color: var(--bad); }
+
+/* Equipment detail overlay (tap a Red Sea alert) */
+.equip-view {
+  background: var(--panel-solid);
+  border-radius: 22px;
+  box-shadow: 0 20px 60px rgba(10, 30, 50, 0.35);
+  width: min(90vw, 1000px);
+  max-height: 92vh;
+  padding: 2.2vh 2vw;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  color: var(--ink);
+}
+
+.equip-bar { display: flex; align-items: center; gap: 1vw; margin-bottom: 1.4vh; }
+.equip-bar .view-title { flex: 1; }
+
+.equip-tabs { display: flex; gap: 0.6vw; margin-bottom: 1.4vh; flex-shrink: 0; }
+.equip-tab {
+  background: var(--inset);
+  border: 2px solid var(--panel-edge);
+  border-radius: 12px;
+  color: var(--ink-2);
+  font-size: 2vh;
+  font-weight: 700;
+  padding: 1.1vh 1.6vw;
+  cursor: pointer;
+}
+.equip-tab.active { border-color: var(--accent); color: var(--ink); }
+.equip-tab.has-alert { border-color: var(--warn); }
+
+.equip-body { overflow-y: auto; min-height: 0; scrollbar-width: none; display: flex; flex-direction: column; gap: 1.4vh; }
+.equip-body::-webkit-scrollbar { display: none; }
+
+.equip-head { display: flex; align-items: flex-start; gap: 1vw; }
+.equip-name { font-size: 3vh; font-weight: 800; }
+.equip-sub { font-size: 1.8vh; color: var(--muted); }
+.equip-headline { margin-left: auto; font-size: 2vh; font-weight: 700; color: var(--ink-2); }
+
+.equip-alert {
+  border-radius: 14px;
+  padding: 1.4vh 1.4vw;
+  background: var(--chip-warn-bg);
+  border: 1px solid var(--chip-warn-edge);
+}
+.equip-alert.is-bad { background: var(--chip-crit-bg); border-color: var(--chip-crit-edge); }
+.equip-alert-top { display: flex; align-items: center; gap: 0.6vw; font-size: 2.2vh; font-weight: 800; color: var(--warn); }
+.equip-alert.is-bad .equip-alert-top { color: var(--bad); }
+/* An advisory: the accent, not amber - "worth a look", not "wrong". */
+.equip-alert.is-info { background: var(--inset); border-color: var(--panel-edge); }
+.equip-alert.is-info .equip-alert-top { color: var(--accent); }
+.equip-alert-top svg { width: 2.4vh; height: 2.4vh; flex-shrink: 0; }
+.equip-steps { margin: 1vh 0 0 1.6vw; display: flex; flex-direction: column; gap: 0.7vh; font-size: 2vh; color: var(--ink); }
+
+.equip-readings {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8vh 1vw;
+}
+.equip-reading {
+  display: flex;
+  flex-direction: column;
+  background: var(--inset);
+  border: 1px solid var(--panel-edge);
+  border-radius: 12px;
+  padding: 0.9vh 0.9vw;
+  min-width: 0;
+}
+.equip-reading em { font-style: normal; font-size: 1.5vh; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.equip-reading b { font-size: 2vh; font-weight: 700; }
+
+.equip-note { font-size: 1.8vh; color: var(--muted); line-height: 1.5; padding-top: 0.6vh; }
+
+.tick-warn { color: var(--warn); }
+.tick-bad { color: var(--bad); }
+.tick-info { color: var(--accent); }
+
+/* ---- Room air ticker: persistent scrolling banner, bottom of screen ----
+   The scroll is a transform-only animation, so with no backdrop blur on the
+   bar it is compositor work alone; it was briefly paged while the Pi was
+   throttled, and Scott wanted the scroll back. */
+.air-ticker {
+  flex-shrink: 0;
+  width: 100%;
+  height: 6.8vh;
+  border: 1px solid var(--panel-edge);
+  border-radius: 16px;
+  background: var(--panel);
+  color: var(--ink-2);
+  overflow: hidden;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+.air-ticker.status-warn { border-color: var(--warn); color: var(--warn); }
+.air-ticker.status-bad { border-color: var(--bad); color: var(--bad); background: rgba(220, 38, 38, 0.15); }
+
+.air-ticker-track {
+  display: flex;
+  width: max-content;
+  white-space: nowrap;
+  animation: ticker-scroll 26s linear infinite;
+}
+.air-ticker:active .air-ticker-track { animation-play-state: paused; }
+
+.air-ticker-content {
+  padding-right: 6vw;
+  font-size: 2.7vh;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: 1.2vw;
+}
+.tick-seg { display: inline-flex; align-items: center; gap: 0.5vw; white-space: nowrap; }
+.tick-seg svg { width: 2.4vh; height: 2.4vh; flex-shrink: 0; }
+.tick-sep { color: var(--muted); }
+.tick-dot { width: 1.5vh; height: 1.5vh; border-radius: 50%; flex-shrink: 0; }
+.dot-ok { background: var(--ok); }
+.dot-warn { background: var(--warn); }
+.dot-bad { background: var(--bad); }
+.dot-stale { background: var(--muted); }
+.tick-stale { color: var(--muted); }
+
+@keyframes ticker-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+/* ---- Timers ---- */
+.clock { cursor: pointer; }
+
+.timer-bar {
+  position: fixed;
+  top: 10vh;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 18;
+  display: flex;
+  gap: 0.6vw;
+}
+.timer-chip {
+  background: rgba(16, 21, 36, 0.94);
+  color: #fff;
+  border: 1px solid rgba(140, 180, 255, 0.35);
+  border-radius: 999px;
+  font-size: 2.2vh;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  padding: 1.3vh 1.8vw;
+  cursor: pointer;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+}
+.timer-chip.done {
+  background: var(--coral);
+  border-color: var(--coral);
+  animation: alarm-pulse 0.7s ease-in-out infinite alternate;
+}
+.timer-x { opacity: 0.6; margin-left: 0.4vw; }
+@keyframes alarm-pulse { from { transform: scale(1); } to { transform: scale(1.06); } }
+
+.timer-picker {
+  background: var(--panel-solid);
+  border-radius: 22px;
+  box-shadow: 0 20px 60px rgba(10, 30, 50, 0.35);
+  width: min(70vw, 640px);
+  padding: 2.4vh 2vw;
+}
+.timer-presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.2vh 0.8vw; margin: 1vh 0; }
+.timer-preset {
+  background: var(--inset);
+  border: 2px solid var(--panel-edge);
+  border-radius: 14px;
+  color: var(--ink);
+  font-size: 2.8vh;
+  font-weight: 800;
+  padding: 2.4vh;
+  cursor: pointer;
+}
+.timer-preset:active { border-color: var(--accent); }
+
+/* ---- Maintenance ---- */
+.maint { margin-top: 1.4vh; }
+.maint-title {
+  font-size: 1.5vh;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.6vh;
+}
+.maint-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6vw;
+  padding: 0.55vh 0;
+  border-bottom: 1px solid var(--panel-edge);
+  font-size: 1.7vh;
+}
+.maint-row:last-child { border-bottom: none; }
+.maint-name { flex: 1; color: var(--ink-2); }
+.maint-due { color: var(--muted); font-weight: 700; font-size: 1.5vh; }
+.maint-row.due .maint-due { color: var(--warn); }
+.maint-row.overdue .maint-due { color: var(--bad); }
+.maint-done {
+  background: var(--inset);
+  border: 1px solid var(--panel-edge);
+  border-radius: 8px;
+  color: var(--ok);
+  font-weight: 800;
+  font-size: 1.7vh;
+  width: 3.4vh;
+  height: 3.4vh;
+  cursor: pointer;
+}
+
+/* ---- Feed mode ---- */
+.feed-btn {
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  color: #fff;
+  font-size: 1.6vh;
+  font-weight: 700;
+  padding: 0.7vh 1.2vw;
+  cursor: pointer;
+}
+.feed-btn.feeding { background: var(--coral); border-color: var(--coral); font-variant-numeric: tabular-nums; }
+
+/* ---- Update panel (wizard) ---- */
+.update-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1vw;
+  font-size: 1.8vh;
+  color: var(--muted);
+  padding-top: 1vh;
+}
+.update-note { color: var(--ok); font-weight: 700; }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(1.5vh); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ---- Doorbell takeover ---- */
+.doorbell {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: #06080f;
+  display: flex;
+  flex-direction: column;
+}
+
+.doorbell-header {
+  display: flex;
+  align-items: center;
+  gap: 1vw;
+  padding: 2vh 2vw;
+  color: #fff;
+  background: linear-gradient(90deg, #1d3557, #0e1f38);
+  flex-shrink: 0;
+}
+
+.doorbell-bell {
+  font-size: 5vh;
+  animation: bell-ring 0.9s ease-in-out 4;
+  transform-origin: top center;
+}
+@keyframes bell-ring {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(14deg); }
+  75% { transform: rotate(-14deg); }
+}
+
+.doorbell-title { font-size: 3.4vh; font-weight: 800; }
+.doorbell-time { font-size: 1.9vh; color: #9fb6d4; }
+
+.doorbell-image {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.doorbell-placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1vh;
+  color: #9fb6d4;
+  font-size: 2.4vh;
+}
+.doorbell-placeholder span { font-size: 9vh; }
+
+/* Phone layout (same web app, opened from a phone browser) */
+@media (max-width: 900px) {
+  body { overflow: auto; }
+  .app { height: auto; }
+  .grid { grid-template-columns: 1fr; }
+  .left-col .tank-panel { min-height: 40vh; }
+  .clock-time, .weather-temp { font-size: 26px; }
+  .tile-value { font-size: 22px; }
+  .photo-manager { width: 100vw; height: 100vh; border-radius: 0; }
+}
+
+/* ---- QR panel inside the kiosk's photo manager ---- */
+.photo-qr-panel {
+  display: flex;
+  gap: 1.5vw;
+  align-items: center;
+  background: var(--inset);
+  border-radius: 14px;
+  padding: 1.4vh 1.2vw;
+  margin-bottom: 1.4vh;
+}
+.photo-qr-panel .setup-qr { width: clamp(190px, 22vh, 280px); height: clamp(190px, 22vh, 280px); }
+.month-nav button.active { border-color: var(--accent); color: var(--accent); }
+
+/* ---- Phone hand-off page (opened by scanning the terminal's QR) ----
+   Sized in px/rem, not the kiosk's vh scale: this one is held in a hand. */
+.phone {
+  min-height: 100vh;
+  background: linear-gradient(170deg, #0a4b7c 0%, #0b6a8e 55%, #0e8a92 100%);
+  padding: 16px 12px 40px;
+  box-sizing: border-box;
+}
+.phone-card {
+  background: var(--panel-solid);
+  color: var(--ink);
+  border-radius: 20px;
+  padding: 20px 16px 24px;
+  max-width: 620px;
+  margin: 0 auto;
+  box-shadow: 0 14px 40px rgba(4, 20, 35, 0.35);
+}
+.phone-header { text-align: center; margin-bottom: 18px; }
+.phone-header h1 { font-size: 24px; font-weight: 800; }
+.phone-header span { display: block; font-size: 13px; color: var(--muted); margin-top: 4px; }
+.phone-card h1 { font-size: 24px; font-weight: 800; text-align: center; }
+
+.phone-tabs {
+  display: flex;
+  gap: 8px;
+  background: var(--inset);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 18px;
+}
+.phone-tabs button {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 16px;
+  font-weight: 700;
+}
+.phone-tabs button.active { background: var(--panel-solid); color: var(--accent); }
+
+.phone-tab { display: flex; flex-direction: column; gap: 14px; }
+.phone-lead { font-size: 15px; line-height: 1.5; color: var(--ink-2); }
+.phone-h2 { font-size: 14px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.phone-empty { font-size: 15px; color: var(--muted); }
+
+.phone-primary {
+  width: 100%;
+  padding: 16px;
+  border: none;
+  border-radius: 14px;
+  background: var(--coral);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+}
+.phone-primary:disabled { opacity: 0.55; }
+
+.phone-result { display: flex; flex-direction: column; gap: 6px; }
+.phone-ok { color: var(--ok); font-size: 15px; font-weight: 700; }
+.phone-problem { color: var(--warn, #c2410c); font-size: 14px; line-height: 1.45; }
+
+.phone-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+}
+.phone-thumb {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--inset);
+}
+.phone-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.phone-thumb button {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(20, 30, 40, 0.65);
+  color: #fff;
+  font-size: 14px;
+}
+
+/* The setup forms are shared with the kiosk, where everything is sized in vh */
+.phone .setup-input { font-size: 16px; padding: 12px 14px; }  /* 16px stops iOS zooming on focus */
+.phone .setup-inline { display: block; }
+.phone .setup-list { max-height: none; gap: 8px; }
+.phone .setup-row { font-size: 15px; padding: 10px 12px; }
+.phone .setup-row-meta { font-size: 13px; }
+.phone .setup-primary.compact { font-size: 16px; padding: 12px 18px; }
+.phone .setup-ok, .phone .setup-error { font-size: 15px; }
+
+/* Silence sits on top of the ticker rather than in its scroll, so it stays
+   put while the text moves and is always in the same place under a thumb. */
+.ticker-silence {
+  position: absolute;
+  right: 0.8vw;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4vw;
+  background: var(--panel-solid);
+  border: 1px solid var(--panel-edge);
+  border-radius: 999px;
+  padding: 0.7vh 1.1vw;
+  font-size: 1.9vh;
+  font-weight: 700;
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  z-index: 2;
+}
+.air-ticker { position: relative; }
+
+/* The "alarms are off" state is deliberately not alarming-looking — it is a
+   statement of fact with a way back, not another warning. */
+.ticker-silence.resumed { color: var(--ink-2); border-style: dashed; }
+
+/* ── Settings hub ─────────────────────────────────────────────────────────
+   A list of things, each saying what it is set to. Two columns on the 1024px
+   panel so the whole list is on one screen: a settings screen that scrolls is
+   a settings screen where the last item never gets found. */
+.hub-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2vh;
+}
+.hub-head h1 { font-size: 3.4vh; font-weight: 800; }
+
+.hub-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1vh 1.4vw;
+}
+.hub-card {
+  display: flex;
+  align-items: center;
+  gap: 1.2vw;
+  text-align: left;
+  padding: 1.5vh 1.4vw;
+  border-radius: 16px;
+  border: 1px solid var(--panel-edge);
+  background: var(--inset);
+  color: var(--ink);
+  cursor: pointer;
+}
+.hub-card:active { border-color: var(--accent); }
+.hub-card.attention { border-color: var(--warn); }
+.hub-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 4.4vh;
+  height: 4.4vh;
+  border-radius: 12px;
+  background: var(--panel-solid);
+  color: var(--accent);
+  font-size: 2.4vh;
+}
+.hub-card.attention .hub-icon { color: var(--warn); }
+.hub-text { display: flex; flex-direction: column; gap: 0.2vh; min-width: 0; flex: 1; }
+.hub-text b { font-size: 2.1vh; font-weight: 700; }
+.hub-text em {
+  font-style: normal;
+  font-size: 1.7vh;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hub-card.attention .hub-text em { color: var(--warn); }
+.hub-chevron { width: 2.2vh; height: 2.2vh; color: var(--muted); flex-shrink: 0; }
+
+.hub-foot {
+  margin-top: 2.4vh;
+  padding-top: 1.8vh;
+  border-top: 1px solid var(--panel-edge);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4vh;
+}
+.hub-danger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.8vw;
+  padding: 1.2vh 2.4vw;
+  border-radius: 14px;
+  border: 1px solid var(--bad);
+  background: transparent;
+  color: var(--bad);
+  font-size: 2vh;
+  font-weight: 700;
+  cursor: pointer;
+}
+.hub-danger-btn svg { width: 2.2vh; height: 2.2vh; }
+.hub-danger { color: var(--bad); }
+.setup-primary.danger { background: var(--bad); }
+
+/* A switch that says what it means in both positions, rather than a checkbox
+   the reader has to work out the polarity of. */
+.hub-toggle {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3vh;
+  text-align: left;
+  padding: 1.4vh 1.6vw;
+  border-radius: 16px;
+  border: 1px solid var(--panel-edge);
+  background: var(--inset);
+  color: var(--ink);
+  cursor: pointer;
+}
+.hub-toggle.on { border-color: var(--accent); }
+.hub-toggle b { font-size: 2.1vh; font-weight: 700; }
+.hub-toggle em { font-style: normal; font-size: 1.7vh; color: var(--muted); line-height: 1.4; }
+
+/* ── Alarm settings ── */
+.alarm-tabs { display: flex; gap: 0.8vw; }
+.alarm-tabs button {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2vh;
+  padding: 1.2vh 1vw;
+  border-radius: 14px;
+  border: 1px solid var(--panel-edge);
+  background: var(--inset);
+  color: var(--ink);
+  font-size: 2vh;
+  font-weight: 700;
+  cursor: pointer;
+}
+.alarm-tabs button.on { border-color: var(--accent); color: var(--accent); }
+.alarm-tabs em { font-style: normal; font-size: 1.6vh; color: var(--muted); text-transform: capitalize; }
+
+.setup-row.alarm-row { display: flex; align-items: center; gap: 1vw; padding: 0; overflow: hidden; }
+.alarm-pick {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 1vw;
+  padding: 1.2vh 1.4vw;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.alarm-check { width: 2.4vh; height: 2.4vh; color: var(--ok); flex-shrink: 0; }
+.alarm-check svg { width: 100%; height: 100%; }
+.alarm-name { display: flex; flex-direction: column; gap: 0.1vh; }
+.alarm-name b { font-size: 2vh; font-weight: 700; }
+.alarm-name em { font-style: normal; font-size: 1.65vh; color: var(--muted); }
+.alarm-play {
+  flex-shrink: 0;
+  width: 5.4vh;
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-left: 1px solid var(--panel-edge);
+  background: transparent;
+  color: var(--accent);
+  font-size: 2.4vh;
+  cursor: pointer;
+}
+.alarm-play:disabled { opacity: 0.35; }
+
+.alarm-steppers { display: flex; gap: 0.8vw; }
+.alarm-stepper {
+  flex: 1;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas: 'label label label' 'minus value plus';
+  align-items: center;
+  gap: 0.4vh 0.6vw;
+  padding: 1vh 0.8vw;
+  border-radius: 14px;
+  border: 1px solid var(--panel-edge);
+  background: var(--inset);
+}
+.alarm-stepper span { grid-area: label; font-size: 1.6vh; color: var(--muted); text-align: center; }
+.alarm-stepper b { grid-area: value; font-size: 2.1vh; text-align: center; }
+.alarm-stepper button {
+  width: 4vh;
+  height: 4vh;
+  border-radius: 10px;
+  border: 1px solid var(--panel-edge);
+  background: var(--panel-solid);
+  color: var(--accent);
+  font-size: 2.2vh;
+  cursor: pointer;
+}
+.alarm-stepper button:first-of-type { grid-area: minus; }
+.alarm-stepper button:last-of-type { grid-area: plus; }
+
+.setup-row.muted { opacity: 0.55; }
+.setup-row.muted .setup-row-meta { font-size: 1.6vh; }
+
+/* View-title glyphs sit on the text baseline rather than the box's, or they
+   ride high against a heavy title. */
+.view-glyph { width: 1em; height: 1em; vertical-align: -0.12em; }
+
+/* ---- Weather card: a sky that behaves like the weather ----
+   Every animation here is transform or opacity only. The Pi composites those
+   on the GPU; an animated filter or shadow at this size stutters visibly. And
+   they are all slow, because a wall display is read from across a room in two
+   second glances — motion should be something you notice only if you stay. */
+.wx-scene {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.85;
+}
+.wx-scene svg { width: 100%; height: 100%; display: block; }
+
+/* The header scene is still for the same reason as the glyphs above: it sits
+   inside the blurred header, and motion there costs a re-blur every frame. */
+
+.wx-drop { animation: wx-fall linear infinite; }
+@keyframes wx-fall {
+  from { transform: translateY(0); opacity: 0; }
+  10% { opacity: 1; }
+  85% { opacity: 0.9; }
+  to { transform: translateY(215px); opacity: 0; }
+}
+
+/* Snow drifts sideways as it falls, and takes its time — snow that falls at
+   rain speed reads as static. */
+.wx-flake { animation: wx-flurry linear infinite; }
+@keyframes wx-flurry {
+  from { transform: translate(0, 0); opacity: 0; }
+  12% { opacity: 0.95; }
+  50% { transform: translate(14px, 105px); }
+  88% { opacity: 0.8; }
+  to { transform: translate(-6px, 216px); opacity: 0; }
+}
+
+.wx-fog-a { animation: wx-bank 34s ease-in-out infinite alternate; }
+.wx-fog-b { animation: wx-bank 27s ease-in-out infinite alternate-reverse; }
+@keyframes wx-bank {
+  from { transform: translateX(-26px); }
+  to { transform: translateX(26px); }
+}
+
+/* One bolt, once every eleven seconds, and only the bolt lights up — the card
+   itself never changes brightness. A storm that strobes the room is the same
+   mistake the reef card used to make. */
+.wx-bolt { opacity: 0; animation: wx-strike 11s ease-out infinite; }
+@keyframes wx-strike {
+  0%, 88% { opacity: 0; }
+  90% { opacity: 0.9; }
+  92% { opacity: 0.15; }
+  94% { opacity: 0.75; }
+  100% { opacity: 0; }
+}
+
+/* Heat has no weather of its own to draw, so the air itself moves. */
+.wx-scene-hot svg { animation: wx-shimmer 9s ease-in-out infinite alternate; }
+@keyframes wx-shimmer {
+  from { transform: translateY(0) scale(1); }
+  to { transform: translateY(-2px) scale(1.012); }
+}
+
+.wx-cond { font-size: 2.1vh; font-weight: 700; color: var(--ink); }
+.wx-feels { font-size: 1.8vh; color: var(--ink-2); }
+
+.wx-rain-chip {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35vw;
+  flex-shrink: 0;
+  font-size: 1.8vh;
+  font-weight: 800;
+  color: #1d4ed8;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 999px;
+  padding: 0.3vh 0.7vw;
+}
+.wx-rain-chip svg { width: 1.8vh; height: 1.8vh; }
+
+/* Today's low and high with the current temperature placed between them. The
+   track runs cool to warm along its length, so the dot's position and the
+   colour under it say the same thing twice. */
+.wx-range { display: flex; align-items: center; gap: 0.6vw; }
+.wx-range-end { font-size: 1.7vh; font-weight: 700; color: var(--ink-2); flex-shrink: 0; }
+.wx-range-track {
+  position: relative;
+  flex: 1;
+  height: 0.9vh;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #7dd3fc, #a3e635 38%, #fbbf24 70%, #fb7185);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+.wx-range-dot {
+  position: absolute;
+  top: 50%;
+  width: 1.7vh;
+  height: 1.7vh;
+  border-radius: 50%;
+  background: #fff;
+  border: 0.32vh solid var(--ink);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 1px 3px rgba(10, 30, 60, 0.35);
+}
+.wx-gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.4vh 0.9vw; padding: 1.4vh 0.9vw; height: 100vh; box-sizing: border-box; overflow: auto; }
+
+/* ---- Tank log + ICP: the written history ---- */
+
+/* The right-hand column of the home: weather, room air, then the written
+   history. */
+.log-card, .icp-card { gap: 0.8vh; }
+.log-card.attention { border-color: var(--warn); }
+.icp-card.attention { border-color: var(--warn); }
+
+.log-lead { display: flex; flex-direction: column; gap: 0.1vh; }
+/* ICP inside the log card: the element tiles, small, and the count */
+.log-icp { margin-top: auto; padding-top: 0.9vh; border-top: 1px solid var(--panel-edge); display: flex; flex-direction: column; gap: 0.6vh; min-height: 0; }
+.log-icp-head { display: flex; align-items: center; gap: 0.5vw; font-size: 2.1vh; font-weight: 800; color: var(--ink); }
+.log-icp-head svg { width: 2.2vh; height: 2.2vh; flex-shrink: 0; }
+.log-icp-when { font-size: 1.7vh; font-weight: 600; color: var(--muted); }
+.log-icp-sum { margin-left: auto; font-size: 1.8vh; font-weight: 600; color: var(--ink-2); }
+.log-icp.is-warn .log-icp-sum { color: var(--warn); }
+.log-icp-sum b { font-weight: 800; }
+.log-icp .icp-heat-mini { flex: 0 0 auto; grid-template-columns: repeat(8, 1fr); gap: 0.4vh 0.3vw; }
+.log-icp .icp-heat-mini .icp-tile { font-size: 1.6vh; border-radius: 6px; height: 3vh; }
+.log-lead-value { font-size: 3.2vh; font-weight: 800; line-height: 1.1; }
+.log-lead-value.is-warn { color: var(--warn); }
+.log-lead-value.is-ok { color: var(--ok); }
+.log-lead-value.muted { color: var(--muted); font-size: 2.4vh; font-weight: 700; }
+.log-lead-label { font-size: 1.9vh; color: var(--ink-2); }
+
+.log-doses { list-style: none; display: flex; flex-direction: column; gap: 0.4vh; }
+.log-doses li { display: flex; align-items: baseline; gap: 0.6vw; font-size: 2vh; }
+.log-dose-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log-dose-ml { margin-left: auto; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+/* The ICP card: a heatmap of the last test on a darker ground, so the tiles
+   carry the card rather than sitting on it. */
+.icp-card {
+  background:
+    linear-gradient(165deg, rgba(58, 79, 110, 0.62) 0%, rgba(31, 48, 76, 0.58) 100%),
+    var(--panel);
+  border-color: rgba(150, 180, 220, 0.28);
+  color: #e8f1fb;
+}
+.icp-card .hc-title, .icp-card .hc-ico { color: #e8f1fb; }
+.icp-when { margin-left: auto; font-size: 1.7vh; color: rgba(226, 240, 252, 0.7); font-weight: 700; }
+.icp-card .log-lead-value.muted { color: rgba(226, 240, 252, 0.75); }
+.icp-card .log-lead-label { color: rgba(226, 240, 252, 0.55); }
+
+.icp-heat {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.6vh 0.4vw;
+}
+
+/* Textured rather than flat: a vertical gradient for depth, a fine diagonal
+   weave over it, a lit top edge and a shadowed bottom one. Gradients only —
+   this repaints on a Pi, and a filter would cost more than it is worth. */
+.icp-tile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  font-size: 2vh;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  background-image:
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.07) 0 2px, rgba(0, 0, 0, 0.05) 2px 4px),
+    linear-gradient(180deg, var(--tile-top), var(--tile-bottom));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    inset 0 -1.5px 0 rgba(0, 0, 0, 0.28),
+    0 1px 3px rgba(6, 18, 34, 0.35);
+}
+/* A soft highlight across the top third, the way light sits on enamel. */
+.icp-tile::after {
+  content: '';
+  position: absolute;
+  inset: 1px 1px 55% 1px;
+  border-radius: 8px 8px 12px 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0));
+  pointer-events: none;
+}
+/* Colour is severity, the same three the dials use: green in the band,
+   amber a little out, red far out. Which side it is out on is an arrow's
+   job, not a colour's. */
+.icp-tile.is-ok, .icp-tile.sev-ok { --tile-top: #45c98a; --tile-bottom: #1c8a53; }
+.icp-tile.sev-warn { --tile-top: #f5c451; --tile-bottom: #c48a0b; }
+.icp-tile.sev-crit { --tile-top: #f2776c; --tile-bottom: #bf352d; }
+.icp-tile.is-unknown, .icp-tile.sev-unknown { --tile-top: #a8b6c9; --tile-bottom: #74839a; }
+
+.icp-heat-foot { font-size: 1.8vh; color: rgba(226, 240, 252, 0.75); font-weight: 600; }
+.icp-heat-foot b { color: #ffd7d2; font-weight: 800; }
+
+/* ---- Tank log view ----
+   Blue panels, and every bottle a liquid dial you tap to enter an amount. */
+.log-body { display: grid; grid-template-columns: 1fr 21vw; gap: 1vw; min-height: 0; }
+.log-col { display: flex; flex-direction: column; gap: 1vh; min-height: 0; overflow: hidden; }
+.log-col-water, .log-col-side {
+  background: linear-gradient(165deg, rgba(150, 215, 232, 0.82) 0%, rgba(96, 176, 210, 0.72) 100%);
+  border-color: rgba(255, 255, 255, 0.7);
+}
+.log-col-head { display: flex; align-items: baseline; gap: 0.8vw; }
+.log-col-title { font-size: 2.6vh; font-weight: 800; color: #0d3550; }
+.log-more-btn {
+  margin-left: auto; border: 1px solid rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.45); color: #0d3550;
+  border-radius: 999px; padding: 0.5vh 0.9vw; font-size: 1.7vh; font-weight: 700; cursor: pointer;
+}
+.view-meta { font-size: 1.9vh; color: var(--ink-2); font-weight: 600; }
+
+.liq-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15.5vw, 1fr));
+  gap: 1.2vh 0.7vw;
+  align-content: start;
+  overflow-y: auto;
+  min-height: 0;
+  user-select: none; -webkit-user-select: none;
+  scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.6) transparent;
+}
+/* The water column is one dial in a narrow lane, so it needs none of that. */
+.liq-grid-single { grid-template-columns: 1fr; flex: 0 0 auto; overflow: visible; }
+.liq-grid-single .liq-tile { height: 19vh; }
+
+/* The tile is glass over water. */
+.liq-tile {
+  height: 26vh;
+  display: flex; flex-direction: column; gap: 0.3vh;
+  border-radius: 16px; padding: 1vh 0.6vw 0.9vh;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(226, 248, 255, 0.4));
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 2px 8px rgba(16, 70, 100, 0.18);
+  cursor: pointer;
+}
+.liq-tile:active { border-color: #fff; box-shadow: inset 0 1px 0 #fff, 0 3px 12px rgba(16, 70, 100, 0.3); }
+
+/* Dial on the left, the last week on the right. .panel sets column direction,
+   so the row has to say so itself. */
+.liq-mid {
+  display: flex; flex-direction: row; align-items: stretch;
+  gap: 0.5vw; flex: 1; min-height: 0;
+}
+.liq-mid.is-solo { justify-content: center; }
+.liq-dial { height: 100%; aspect-ratio: 1; flex: 0 0 auto; cursor: pointer; }
+.liq-mid.is-solo .liq-dial { height: 100%; }
+.liq-spark-wrap {
+  flex: 1; min-width: 0; display: flex; flex-direction: column;
+  justify-content: flex-end; cursor: pointer;
+}
+.liq-spark { width: 100%; flex: 1; min-height: 0; }
+.liq-spark-cap {
+  text-align: right; font-size: 1.3vh; font-weight: 700; letter-spacing: 0.03em;
+  color: rgba(13, 53, 80, 0.5); padding-top: 0.2vh;
+}
+.liq-bar { fill: #2f9fc4; }
+.liq-bar.is-last { fill: #17739a; }
+.liq-bar.is-zero { fill: rgba(13, 53, 80, 0.22); }
+.liq-spark-base { stroke: rgba(13, 53, 80, 0.28); stroke-width: 1; vector-effect: non-scaling-stroke; }
+
+.liq-label {
+  font-size: 1.95vh; font-weight: 800; letter-spacing: 0.03em; text-transform: uppercase;
+  text-align: center; color: #17435f;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.liq-well { fill: rgba(255, 255, 255, 0.78); }
+.liq-glass { fill: none; stroke: rgba(20, 64, 94, 0.32); stroke-width: 2; }
+.liq-shine { fill: rgba(255, 255, 255, 0.6); }
+.liq-read { display: flex; align-items: baseline; justify-content: center; gap: 0.35vw; }
+.liq-read b { font-size: 3.8vh; font-weight: 800; color: #0d3550; font-variant-numeric: tabular-nums; line-height: 1; }
+.liq-read em { font-style: normal; font-size: 1.85vh; font-weight: 600; color: rgba(13, 53, 80, 0.72); }
+.liq-sub { text-align: center; font-size: 1.65vh; color: rgba(13, 53, 80, 0.65); }
+
+.log-note { font-size: 1.5vh; color: rgba(13, 53, 80, 0.6); }
+.log-water-note { font-size: 1.9vh; color: #14405e; }
+.log-water-note b { color: #0d3550; font-weight: 800; }
+
+/* picking a bottle that is not on the screen */
+.bottle-picker {
+  background: linear-gradient(180deg, #16233f, #0f1930);
+  border: 1px solid rgba(150, 190, 240, 0.25);
+  border-radius: 22px; padding: 2vh 1.4vw; width: min(60vw, 700px);
+  display: flex; flex-direction: column; gap: 1.2vh; color: #e9f3ff;
+}
+.bottle-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.8vh 0.6vw; max-height: 44vh; overflow-y: auto; }
+.bottle-list button {
+  padding: 1.6vh 0.6vw; border-radius: 12px;
+  border: 1px solid rgba(160, 200, 245, 0.25);
+  background: rgba(255, 255, 255, 0.08); color: #eaf4ff;
+  font-size: 2vh; font-weight: 700; cursor: pointer;
+}
+.bottle-list button:active { background: rgba(255, 255, 255, 0.2); }
+
+.log-del {
+  flex-shrink: 0; width: 3.4vh; height: 3.4vh; border-radius: 8px;
+  border: 0; background: transparent; color: var(--muted); font-size: 2.4vh; cursor: pointer;
+}
+.log-when { color: var(--muted); font-size: 1.7vh; min-width: 8.5em; flex-shrink: 0; }
+.log-what { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log-amount { margin-left: auto; color: var(--ink-2); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+/* ---- History overlay (dosing, water changes) ---- */
+.keypad-overlay { z-index: 30; }
+.hist-log-btn {
+  border: 0; background: #4cc3f7; color: #04243a;
+  border-radius: 999px; padding: 1vh 1.8vw;
+  font-size: 2.1vh; font-weight: 800; cursor: pointer;
+  box-shadow: 0 2px 10px rgba(76, 195, 247, 0.35);
+}
+.hist-log-btn:active { background: #2fb0ea; }
+
+.hist-ranges { display: flex; flex-direction: row; gap: 0.5vw; margin: 0.4vh 0 0.8vh; }
+.hist-range {
+  border: 1px solid rgba(140, 190, 235, 0.35);
+  background: rgba(255, 255, 255, 0.06); color: rgba(215, 232, 250, 0.85);
+  border-radius: 999px; padding: 0.8vh 1.5vw;
+  font-size: 2vh; font-weight: 700; cursor: pointer; min-width: 7vw;
+}
+.hist-range.is-on { background: #4cc3f7; border-color: #4cc3f7; color: #04243a; }
+
+.hist-bar { fill: #4cc3f7; opacity: 0.75; }
+.hist-bar.last { opacity: 1; }
+.hist-target { stroke: rgba(61, 220, 151, 0.6); stroke-width: 2; stroke-dasharray: 7 5; }
+.hist-target-label { fill: rgba(61, 220, 151, 0.9); font-size: 17px; font-weight: 700; }
+.hist-empty { color: rgba(210, 230, 250, 0.7); font-size: 2.4vh; padding: 4vh 0; text-align: center; }
+.hist-list {
+  max-height: 22vh; overflow-y: auto; min-height: 0;
+  display: flex; flex-direction: column; gap: 0.2vh;
+  user-select: none; -webkit-user-select: none;
+  scrollbar-width: thin; scrollbar-color: rgba(160, 190, 230, 0.5) transparent;
+}
+.hist-row {
+  display: flex; align-items: baseline; gap: 0.8vw;
+  padding: 0.9vh 0.4vw; border-bottom: 1px solid rgba(160, 190, 230, 0.16);
+  font-size: 2vh; color: #dce9f8;
+}
+.hist-row:last-child { border-bottom: 0; }
+.hist-row .log-when { color: rgba(200, 220, 245, 0.65); }
+.hist-row .log-amount { color: rgba(220, 235, 250, 0.9); }
+.hist-row .log-del { color: rgba(200, 220, 245, 0.6); }
+
+/* ---- ICP view ---- */
+/* A flex column with overflow only scrolls if its children refuse to shrink.
+   Without flex-shrink: 0 below, the groups compressed to fit instead, the
+   meters hit their own min-height, and the last row was quietly clipped with
+   nothing to drag — a screen that looks full rather than one that scrolls. */
+.icp-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.4vh;
+  min-height: 0;
+  overflow-y: auto;
+  /* Say so explicitly: a finger drag pans this, and stops at its ends rather
+     than handing the gesture to whatever is behind it. */
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 145, 185, 0.55) transparent;
+  padding-right: 0.4vw;
+  /* The panel's input arrives as a mouse, and a mouse dragged across a page
+     selects text rather than scrolling it. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Elements read like tank parameters: the same dark glass tile, the same
+   needle, the same status border. Pastel chips on a pastel panel washed out
+   from more than a step away, and at 1.9vh the numbers in them were closer to
+   decoration than data. */
+.icp-group-block { display: flex; flex-direction: column; gap: 0.8vh; flex-shrink: 0; }
+.icp-group-head { display: flex; align-items: baseline; gap: 0.8vw; }
+.icp-group-head h2 { font-size: 2.4vh; font-weight: 800; color: var(--ink); }
+.icp-group-head span { font-size: 1.7vh; color: var(--muted); }
+
+.icp-meters {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1.1vh 0.9vw;
+}
+/* Taller than a tank gauge is wide, because these carry a longer name, a
+   reference range under the number, and the run of tests under that. */
+.icp-meter { min-height: 23vh; }
+.icp-meter .gauge-label { font-size: 2.1vh; letter-spacing: 0.06em; }
+.icp-meter .gauge-value { font-size: 21px; font-weight: 800; }
+.icp-meter .gauge-sub { font-size: 9.5px; }
+
+/* The run of tests under the needle. `.gauge svg` would otherwise claim this
+   with flex: 1 and fight the dial for height, hence the doubled class. */
+.icp-spark-wrap { display: flex; flex-direction: column; flex: 0 0 auto; gap: 0.1vh; }
+.icp-meter .icp-spark { flex: 0 0 auto; width: 100%; height: 4.2vh; overflow: visible; }
+.icp-spark-band { fill: rgba(61, 220, 151, 0.2); }
+.icp-spark-line { stroke: #4cc3f7; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.icp-spark-dot { fill: #4cc3f7; }
+.status-low .icp-spark-line, .status-warn .icp-spark-line { stroke: var(--tank-warn); }
+.status-low .icp-spark-dot, .status-warn .icp-spark-dot { fill: var(--tank-warn); }
+.status-high .icp-spark-line { stroke: var(--tank-bad); }
+.status-high .icp-spark-dot { fill: var(--tank-bad); }
+.icp-spark-cap {
+  text-align: right; font-size: 1.5vh; font-weight: 700; line-height: 1.1;
+  color: rgba(200, 222, 245, 0.6); flex: 0 0 auto;
+}
+.icp-spark-cap.is-alone { margin-top: auto; text-align: center; }
+
+/* The add-a-test QR, over whatever offered it. */
+.qr-overlay { z-index: 30; }
+.qr-dialog {
+  background: var(--panel-solid);
+  border-radius: 22px;
+  box-shadow: 0 20px 60px rgba(10, 30, 50, 0.45);
+  width: 74vw;
+  padding: 2.2vh 1.8vw;
+  display: flex; flex-direction: column; gap: 1.4vh;
+}
+
+/* ---- One element's history ---- */
+.icp-band { fill: rgba(61, 220, 151, 0.16); }
+.icp-band-edge { stroke: rgba(61, 220, 151, 0.5); stroke-width: 1.5; stroke-dasharray: 6 5; }
+.icp-grid { stroke: rgba(160, 190, 230, 0.14); stroke-width: 1; }
+.icp-line { stroke: #4cc3f7; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+.icp-dot { fill: #4cc3f7; stroke: #0c1132; stroke-width: 2; }
+.icp-tick, .icp-xlabel { fill: rgba(210, 230, 250, 0.75); font-size: 19px; font-weight: 600; }
+.icp-unit { fill: rgba(210, 230, 250, 0.7); font-size: 17px; font-weight: 600; }
+.icp-last { fill: #eaf5ff; font-size: 30px; font-weight: 800; }
+
+.icp-empty { display: flex; flex-direction: column; gap: 1.2vh; align-items: flex-start; }
+.icp-empty h2 { font-size: 3vh; font-weight: 800; }
+.icp-empty p { font-size: 2vh; color: var(--ink-2); max-width: 46em; line-height: 1.5; }
+.icp-qr { display: flex; flex-direction: column; gap: 1.4vh; }
+
+/* ---- Phone: the ICP paste form ---- */
+.phone-paste {
+  width: 100%; border-radius: 12px; border: 2px solid var(--panel-edge);
+  background: var(--inset); color: var(--ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 15px; line-height: 1.5; padding: 12px 14px; resize: vertical;
+}
+.phone-icp-flags { list-style: none; display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.phone-icp-flags li { font-size: 16px; }
+.phone-icp-flags li em { font-style: normal; text-transform: uppercase; font-size: 13px; font-weight: 700; opacity: 0.8; }
+
+/* Dose and water-change marks on a parameter's trend. Drawn under the curve:
+   the reading is what the chart is about, and a mark that obscures it has
+   answered the wrong question. */
+.trend-mark-line { stroke-width: 1.5; stroke-dasharray: 3 5; opacity: 0.55; }
+.trend-mark.is-dose .trend-mark-line { stroke: var(--accent); }
+.trend-mark.is-water .trend-mark-line { stroke: #0d9488; stroke-width: 2.5; stroke-dasharray: 5 4; opacity: 0.75; }
+.trend-mark.is-dose .trend-mark-glyph { fill: var(--accent); }
+.trend-mark.is-water .trend-mark-glyph { fill: #0d9488; }
+.trend-mark.on .trend-mark-line { opacity: 1; }
+.trend-mark.on .trend-mark-glyph { stroke: var(--panel-solid); stroke-width: 2; }
+.trend-mark-count { fill: var(--ink-2); font-size: 12px; font-weight: 800; }
+
+.trend-mark-tip rect { fill: var(--panel-solid); stroke: var(--panel-edge); stroke-width: 1; }
+.trend-mark-tip text { fill: var(--ink); font-size: 14px; font-weight: 700; }
+
+.trend-key { display: inline-flex; align-items: center; gap: 0.4vw; color: var(--muted); font-size: 1.7vh; font-weight: 600; }
+.trend-key svg { width: 1.4vh; height: 1.4vh; }
+.trend-key-dose { fill: var(--accent); }
+.trend-key-water { fill: #0d9488; }
+
+/* The phone page grew these class names before it grew rules for them — the
+   voice tab has been rendering unstyled blocks since it shipped. Base rules
+   first, then the preview's own. 16px on inputs is deliberate: anything
+   smaller makes iOS zoom the page on focus. */
+.phone-section { display: flex; flex-direction: column; gap: 12px; }
+.phone-note { font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+.phone-error {
+  font-size: 15px; font-weight: 600; color: #fff; line-height: 1.45;
+  background: var(--bad); border-radius: 10px; padding: 10px 12px;
+}
+.phone-input {
+  width: 100%;
+  font-size: 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 2px solid var(--panel-edge);
+  background: var(--inset);
+  color: var(--ink);
+}
+.phone-btn {
+  width: 100%;
+  padding: 16px;
+  border: none;
+  border-radius: 14px;
+  background: var(--coral);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.phone-btn:disabled { opacity: 0.55; }
+
+/* ---- Phone: PDF preview before anything is saved ---- */
+.phone-btn.file { display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.phone-btn.file.busy { opacity: 0.6; }
+.phone-btn.ghost { background: transparent; border: 2px solid var(--panel-edge); color: var(--ink-2); }
+
+.phone-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.phone-field span { font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.7; }
+
+.phone-preview { list-style: none; display: flex; flex-direction: column; gap: 4px; margin: 10px 0; }
+.phone-preview li {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 11px 12px; border-radius: 10px;
+  background: var(--inset); border: 1px solid var(--panel-edge);
+  font-size: 16px; cursor: pointer;
+}
+.phone-preview li b { min-width: 8.5em; font-weight: 700; }
+.phone-preview-val { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 700; }
+.phone-preview-val em { font-style: normal; font-weight: 500; opacity: 0.6; font-size: 13px; }
+.phone-preview-flag {
+  font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 2px 7px; border-radius: 999px; background: rgba(255,180,80,0.22);
+}
+/* A dropped row stays visible — it is evidence of what the PDF said, and
+   hiding it would make the list disagree with the report it came from. */
+.phone-preview li.dropped { opacity: 0.42; text-decoration: line-through; }
+
+.phone-skipped { margin: 6px 0 12px; font-size: 14px; opacity: 0.75; }
+.phone-skipped summary { cursor: pointer; font-weight: 600; }
+.phone-skipped ul { list-style: none; margin: 8px 0 0; display: flex; flex-direction: column; gap: 4px; }
+.phone-skipped li { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; opacity: 0.8; }
+
+/* ---- Coral journal ---- */
+.coral-body {
+  display: flex; flex-direction: column; gap: 1vh; min-height: 0; overflow-y: auto;
+  touch-action: pan-y; overscroll-behavior: contain;
+  scrollbar-width: thin; scrollbar-color: rgba(120, 145, 185, 0.55) transparent;
+  user-select: none; -webkit-user-select: none;
+}
+.coral-body > .coral-grid, .coral-body > .panel { flex-shrink: 0; }
+
+/* Four across on the panel. auto-fill at a small minimum packed them into
+   thumbnails a coral cannot be recognised in, which is the one thing this
+   screen has to do. */
+.coral-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.2vh 0.8vw;
+  align-content: start;
+}
+.coral-card {
+  display: flex; flex-direction: column; gap: 0.6vh;
+  padding: 0; overflow: hidden;
+  border-radius: 16px; border: 1px solid var(--panel-edge);
+  background: var(--panel); color: var(--ink);
+  cursor: pointer; text-align: left;
+}
+.coral-card:active { border-color: var(--accent); }
+.coral-card.add { border-style: dashed; }
+.coral-card-body { display: flex; flex-direction: column; gap: 0.1vh; padding: 0 0.7vw 1vh; min-width: 0; }
+.coral-card-body b { font-size: 2vh; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.coral-card-body em { font-style: normal; font-size: 1.6vh; color: var(--muted); }
+
+.coral-thumb { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; background: var(--inset); }
+.coral-thumb.empty { display: grid; place-items: center; color: var(--muted); }
+.coral-thumb.empty svg { width: 4vh; height: 4vh; }
+
+/* ---- One coral ---- */
+.coral-detail { display: flex; flex-direction: column; gap: 1vh; min-height: 0; }
+.coral-detail-head { display: flex; align-items: center; gap: 1vw; }
+.coral-detail-title { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.coral-detail-title b { font-size: 2.6vh; font-weight: 800; }
+.coral-detail-title em { font-style: normal; font-size: 1.7vh; color: var(--muted); }
+
+/* Then and now, with the months between them in the middle. This pair is the
+   whole feature — everything else on the screen serves getting it drawn. */
+/* .panel sets a column direction; without saying otherwise, then-and-now
+   stacked one above the other and the comparison disappeared. */
+.coral-compare { display: flex; flex-direction: row; align-items: center; gap: 1.2vw; justify-content: center; min-height: 0; }
+.coral-compare figure { display: flex; flex-direction: column; gap: 0.6vh; align-items: center; min-width: 0; flex: 1; }
+.coral-compare figure.only { max-width: 60%; }
+.coral-compare img {
+  width: 100%; max-height: 34vh; object-fit: contain;
+  border-radius: 14px; background: var(--inset);
+}
+.coral-compare figcaption { font-size: 1.8vh; font-weight: 700; color: var(--ink-2); }
+.coral-span { display: flex; flex-direction: column; align-items: center; gap: 0.2vh; flex-shrink: 0; }
+.coral-span b { font-size: 2.2vh; font-weight: 800; color: var(--accent); text-align: center; }
+.coral-span em { font-style: normal; font-size: 1.6vh; color: var(--muted); }
+
+.coral-strip { display: flex; gap: 0.5vw; overflow-x: auto; padding-bottom: 0.4vh; flex-shrink: 0; }
+.coral-strip-item {
+  flex: 0 0 auto; display: flex; flex-direction: column; gap: 0.2vh; align-items: center;
+  padding: 0; border: 2px solid transparent; border-radius: 10px; background: transparent;
+  color: var(--muted); cursor: pointer;
+}
+.coral-strip-item.on { border-color: var(--accent); }
+.coral-strip-item img { width: 9vh; height: 7vh; object-fit: cover; border-radius: 8px; display: block; }
+.coral-strip-item span { font-size: 1.4vh; font-weight: 600; }
+
+.coral-lightbox {
+  background: var(--panel-solid); border-radius: 18px; padding: 1.4vh 1.2vw;
+  display: flex; flex-direction: column; gap: 1vh; max-width: 88vw; max-height: 88vh;
+}
+.coral-lightbox img { max-width: 100%; max-height: 70vh; object-fit: contain; border-radius: 12px; }
+.coral-lightbox-bar { display: flex; align-items: center; gap: 1vw; font-size: 2vh; font-weight: 700; color: var(--ink); }
+.coral-lightbox-bar .month-close { margin-left: auto; }
+
+.coral-empty { display: flex; flex-direction: column; gap: 1.2vh; align-items: flex-start; }
+.coral-empty h2 { font-size: 3vh; font-weight: 800; }
+.coral-empty p { font-size: 2vh; color: var(--ink-2); max-width: 46em; line-height: 1.5; }
+
+/* ---- Phone: picking which coral ---- */
+.phone-corals { list-style: none; display: flex; flex-direction: column; gap: 8px; margin: 4px 0; }
+.phone-corals button {
+  width: 100%; display: flex; align-items: center; gap: 12px;
+  padding: 8px; border-radius: 12px;
+  border: 1px solid var(--panel-edge); background: var(--inset); color: var(--ink);
+  cursor: pointer; text-align: left;
+}
+.phone-corals img, .phone-coral-blank {
+  width: 56px; height: 56px; border-radius: 10px; object-fit: cover;
+  background: var(--panel-solid); flex-shrink: 0; display: block;
+}
+.phone-coral-name { display: flex; flex-direction: column; min-width: 0; }
+.phone-coral-name b { font-size: 17px; font-weight: 700; }
+.phone-coral-name em { font-style: normal; font-size: 13px; color: var(--muted); }
+
+/* ---- The bold way out of a settings panel ---- */
+.hub-save { display: flex; margin-top: 2.2vh; }
+.hub-save .setup-primary { flex: 1; }
+.photo-manager .photo-grid { flex: 1; }
+.photo-manager .photo-done { margin-top: 1.6vh; flex-shrink: 0; }
+
+/* ---- Screensaver: when, then what ---- */
+.saver-delay {
+  display: flex;
+  align-items: center;
+  gap: 1.2vw;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.saver-delay-label { font-size: 2vh; font-weight: 700; color: var(--ink-2); }
+.saver-chips { display: flex; gap: 0.7vw; flex-wrap: wrap; }
+.saver-chip {
+  background: var(--inset);
+  border: 2px solid var(--panel-edge);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 2vh;
+  font-weight: 700;
+  padding: 1vh 1.6vw;
+  cursor: pointer;
+}
+.saver-chip.selected { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--inset)); }
+.saver-list-off { opacity: 0.55; }
+
+/* ---- Screensaver choice ---- */
+/* Four options at this row height overflow the shared 34vh cap, and the one
+   they cut off is "leave the dashboard up" — a choice nobody would guess was
+   below the fold. */
+.saver-list { max-height: none; }
+.setup-row.saver-row { align-items: flex-start; gap: 1vw; }
+.saver-text { display: flex; flex-direction: column; gap: 0.2vh; min-width: 0; }
+.saver-text b { font-size: 2.1vh; font-weight: 700; }
+.saver-text em { font-style: normal; font-size: 1.7vh; color: var(--muted); font-weight: 500; line-height: 1.4; }
+.saver-none { color: var(--warn); }
+
+/* The caption on an idle coral photo: which coral, and when. */
+.slideshow-caption {
+  position: absolute;
+  left: 3vw;
+  bottom: 4vh;
+  /* The clock sits bottom-right; a long coral name has to stop before it
+     rather than run underneath. */
+  max-width: 62vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 3vh;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.75);
+  letter-spacing: 0.01em;
+}
+
+/* ---- Design scratch pad: five ICP cards (?icpcards=1) ---- */
+.icpc-page {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2.2vh 1.2vw;
+  padding: 2vh 1.2vw;
+  height: 100vh;
+  align-content: start;
+}
+.icpc-empty { font-size: 2.4vh; color: var(--muted); }
+.icpc-figure { display: flex; flex-direction: column; gap: 0.6vh; margin: 0; min-width: 0; }
+.icpc-figure figcaption { display: flex; flex-direction: column; gap: 0.1vh; }
+.icpc-figure figcaption b { font-size: 1.9vh; font-weight: 800; }
+.icpc-figure figcaption span { font-size: 1.5vh; color: var(--muted); line-height: 1.3; }
+/* The real card's footprint on the home grid — 36vh, measured off the
+   running dashboard — so these are judged at the size they would ship at. */
+.icpc-card { height: 36vh; gap: 0.8vh; }
+.icpc-when { margin-left: auto; font-size: 1.6vh; font-weight: 700; color: var(--muted); }
+
+/* 1. score ring */
+.icpc-ring-row { display: flex; align-items: center; gap: 0.8vw; flex: 1; min-height: 0; }
+.icpc-ring { height: 100%; flex-shrink: 0; }
+.icpc-ring-track { fill: none; stroke: var(--panel-edge); stroke-width: 13; }
+.icpc-ring-fill { fill: none; stroke-width: 13; stroke-linecap: round; }
+.icpc-ring-num { text-anchor: middle; font-size: 34px; font-weight: 800; fill: var(--ink); }
+.icpc-ring-of { font-size: 19px; fill: var(--muted); }
+.icpc-ring-cap { text-anchor: middle; font-size: 13px; font-weight: 700; fill: var(--muted); letter-spacing: 0.04em; }
+.icpc-worst { list-style: none; display: flex; flex-direction: column; gap: 0.5vh; flex: 1; min-width: 0; }
+.icpc-worst li { display: flex; align-items: baseline; gap: 0.5vw; font-size: 2vh; }
+.icpc-worst b { font-weight: 800; min-width: 2.2em; }
+.icpc-worst span { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--ink-2); }
+.icpc-worst em { margin-left: auto; font-style: normal; font-weight: 800; }
+
+/* 2. heatmap */
+.icpc-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.5vh 0.35vw; flex: 1; min-height: 0; }
+.icpc-cell {
+  display: grid; place-items: center; border-radius: 8px;
+  color: #fff; font-size: 1.9vh; font-weight: 800; letter-spacing: 0.01em;
+}
+
+/* 3. skyline */
+.icpc-sky { width: 100%; flex: 1; min-height: 0; }
+.icpc-sky-mid { stroke: var(--panel-edge); stroke-width: 1.5; stroke-dasharray: 4 4; }
+.icpc-sky-label { text-anchor: middle; font-size: 8px; font-weight: 700; fill: var(--muted); }
+
+/* 4. spotlight */
+.icpc-spot { display: flex; align-items: baseline; gap: 0.6vw; }
+.icpc-spot-sym { font-size: 4.4vh; font-weight: 800; line-height: 1; }
+.icpc-spot-val { font-size: 3vh; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+.icpc-spot-val em { font-style: normal; font-size: 1.6vh; font-weight: 600; color: var(--muted); margin-left: 0.2vw; }
+.icpc-spot-tag {
+  margin-left: auto; color: #fff; font-size: 1.5vh; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.06em; padding: 0.3vh 0.6vw; border-radius: 999px;
+}
+.icpc-spark { width: 100%; flex: 1; min-height: 0; }
+.icpc-spark-band { fill: rgba(47, 169, 107, 0.18); }
+
+/* 5. sample jar */
+.icpc-jar-card { background: linear-gradient(165deg, rgba(190, 227, 248, 0.75), rgba(150, 205, 240, 0.6)), var(--panel); }
+.icpc-jar-row { display: flex; align-items: center; gap: 0.8vw; flex: 1; min-height: 0; }
+.icpc-jar { flex: 1; min-height: 0; }
+.icpc-jar-glass { fill: rgba(255, 255, 255, 0.35); stroke: rgba(255, 255, 255, 0.8); stroke-width: 3; }
+.icpc-jar-cap { fill: #8aa2bd; }
+.icpc-jar-col { display: flex; flex-direction: column; align-items: center; gap: 0.2vh; height: 100%; flex-shrink: 0; }
+.icpc-jar-pct { display: flex; align-items: baseline; gap: 0.25vw; font-size: 2.4vh; font-weight: 800; color: #10405c; }
+.icpc-jar-pct em { font-style: normal; font-size: 1.4vh; font-weight: 700; color: rgba(16, 64, 92, 0.65); }
+
+/* Spotlight, first test: where the reading sits against the band it missed. */
+.icpc-pos { position: relative; height: 1.8vh; border-radius: 999px; background: rgba(140, 165, 200, 0.25); margin: auto 0; }
+.icpc-pos-band { position: absolute; top: 0; bottom: 0; background: rgba(47, 169, 107, 0.35); border-radius: 999px; }
+.icpc-pos-dot { position: absolute; top: 50%; width: 2.4vh; height: 2.4vh; border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 1px 4px rgba(10,30,60,0.35); }
+.icpc-track { fill: rgba(140, 165, 200, 0.25); }
+.icpc-spot-foot { font-size: 1.5vh; color: var(--muted); }
+
+/* ---- Design scratch pad: dosing / water gauge treatments (?logstyles=1) ---- */
+.lg-page { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(3, 1fr); gap: 1.4vh 1vw; padding: 1.4vh 1vw; height: 100vh; }
+.lg-option { display: flex; flex-direction: column; gap: 0.4vh; min-height: 0; }
+.lg-panel { display: flex; flex-direction: row; gap: 0.5vw; padding: 0.9vh 0.6vw; align-items: stretch; flex: 1; min-height: 0; }
+.lg-caption { display: flex; flex-direction: column; }
+.lg-caption b { font-size: 1.9vh; font-weight: 800; }
+.lg-caption span { font-size: 1.5vh; color: var(--muted); line-height: 1.3; }
+
+/* the panel shades */
+.lg-panel-sky   { background: linear-gradient(165deg, rgba(186, 220, 250, 0.85), rgba(150, 195, 238, 0.7)); }
+.lg-panel-navy  { background: linear-gradient(165deg, #1b2b4d, #101a33); }
+.lg-panel-aqua  { background: linear-gradient(165deg, rgba(150, 225, 235, 0.85), rgba(94, 186, 214, 0.75)); }
+.lg-panel-slate { background: linear-gradient(165deg, #33486b, #22314c); }
+.lg-panel-steel { background: linear-gradient(165deg, rgba(158, 186, 216, 0.9), rgba(112, 146, 184, 0.85)); }
+
+/* the glass tiles the gauges sit on */
+.lg-tile {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.2vh;
+  border-radius: 14px; padding: 0.8vh 0.4vw 0.7vh;
+}
+.lg-tile svg { width: 100%; flex: 1; min-height: 0; }
+.lg-glass-light {
+  background: linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,255,255,0.42));
+  border: 1px solid rgba(255,255,255,0.85);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 2px 8px rgba(30,60,100,0.18);
+}
+.lg-glass-dark {
+  background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.03));
+  border: 1px solid rgba(150,190,240,0.22);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 2px 10px rgba(0,0,0,0.35);
+}
+.lg-glass-aqua {
+  background: linear-gradient(180deg, rgba(255,255,255,0.66), rgba(226,248,255,0.38));
+  border: 1px solid rgba(255,255,255,0.8);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 2px 8px rgba(20,80,110,0.2);
+}
+.lg-glass-slate {
+  background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.04));
+  border: 1px solid rgba(160,200,245,0.24);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 2px 10px rgba(0,0,0,0.3);
+}
+.lg-glass-steel {
+  background: linear-gradient(180deg, rgba(255,255,255,0.78), rgba(240,246,252,0.5));
+  border: 1px solid rgba(255,255,255,0.9);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.95), 0 2px 8px rgba(40,70,110,0.22);
+}
+
+.lg-label { font-size: 1.5vh; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; text-align: center; color: #24405e; }
+.lg-label-light { color: #cfe2f8; }
+.lg-read { display: flex; align-items: baseline; justify-content: center; gap: 0.25vw; }
+.lg-read b { font-size: 2.6vh; font-weight: 800; color: #16324f; font-variant-numeric: tabular-nums; }
+.lg-read em { font-style: normal; font-size: 1.4vh; color: rgba(22,50,79,0.7); }
+.lg-glass-dark .lg-read b, .lg-glass-slate .lg-read b { color: #eaf4ff; }
+.lg-glass-dark .lg-read em, .lg-glass-slate .lg-read em { color: rgba(220,238,255,0.7); }
+.lg-sub { text-align: center; font-size: 1.3vh; color: rgba(22,50,79,0.6); }
+.lg-glass-dark .lg-sub, .lg-glass-slate .lg-sub { color: rgba(210,232,255,0.6); }
+
+/* A — gradient sweep */
+.lg-sweep-track { fill: none; stroke: rgba(255,255,255,0.55); stroke-width: 11; stroke-linecap: round; }
+.lg-sweep-band { fill: none; stroke-width: 8; stroke-linecap: round; }
+.lg-tick-light { stroke: rgba(30,60,95,0.35); stroke-width: 1.4; }
+.lg-needle-dark { fill: #16324f; }
+.lg-hub-dark { fill: #16324f; stroke: rgba(255,255,255,0.85); stroke-width: 1.5; }
+
+/* B — neon fill */
+.lg-neon-track { fill: none; stroke: rgba(160,200,245,0.16); stroke-width: 9; stroke-linecap: round; }
+.lg-neon-glow { fill: none; stroke-width: 16; stroke-linecap: round; opacity: 0.22; }
+.lg-neon-fill { fill: none; stroke-width: 8; stroke-linecap: round; }
+.lg-neon-dot { fill: #ecfeff; }
+
+/* C — liquid dial */
+.lg-liquid-well { fill: rgba(255,255,255,0.5); }
+.lg-liquid-glass { fill: none; stroke: rgba(255,255,255,0.9); stroke-width: 2.5; }
+.lg-liquid-shine { fill: rgba(255,255,255,0.55); }
+
+/* D — segments */
+.lg-seg { stroke-width: 5.5; stroke-linecap: round; }
+.lg-hub-light { fill: rgba(220,238,255,0.8); }
+
+/* E — instrument dial */
+.lg-zone { fill: none; stroke-width: 7; }
+.lg-tick-major { stroke: #274563; stroke-width: 1.8; }
+.lg-tick-minor { stroke: rgba(39,69,99,0.5); stroke-width: 1; }
+.lg-needle-red { fill: #d1332a; }
+.lg-hub-steel { fill: #445c78; stroke: rgba(255,255,255,0.9); stroke-width: 1.6; }
+.lg-dome { fill: rgba(255,255,255,0.3); }
+
+/* ---- Keypad: typing an amount on a wet touchscreen ---- */
+.keypad {
+  background: linear-gradient(180deg, #16233f 0%, #0f1930 100%);
+  border: 1px solid rgba(150, 190, 240, 0.25);
+  border-radius: 24px;
+  box-shadow: 0 24px 70px rgba(4, 12, 28, 0.6);
+  padding: 2vh 1.6vw;
+  width: min(52vw, 620px);
+  display: flex;
+  flex-direction: column;
+  gap: 1.4vh;
+  color: #e9f3ff;
+}
+.keypad-head { display: flex; align-items: flex-start; gap: 1vw; }
+.keypad-title { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.keypad-title b { font-size: 3vh; font-weight: 800; }
+.keypad-title em { font-style: normal; font-size: 1.8vh; color: rgba(210, 232, 255, 0.65); }
+
+.keypad-value {
+  display: flex; align-items: baseline; justify-content: flex-end; gap: 0.5vw;
+  background: rgba(6, 14, 30, 0.6);
+  border: 2px solid rgba(150, 190, 240, 0.22);
+  border-radius: 16px;
+  padding: 1.2vh 1.2vw;
+  font-variant-numeric: tabular-nums;
+}
+.keypad-value span { font-size: 6vh; font-weight: 800; line-height: 1; }
+.keypad-value em { font-style: normal; font-size: 2.4vh; color: rgba(210, 232, 255, 0.7); }
+.keypad-value.empty span { color: rgba(210, 232, 255, 0.35); }
+
+.keypad-keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.8vh 0.6vw; }
+.keypad-key {
+  height: 8.4vh;
+  border-radius: 14px;
+  border: 1px solid rgba(160, 200, 245, 0.2);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05));
+  color: #eaf4ff;
+  font-size: 3.4vh;
+  font-weight: 700;
+  cursor: pointer;
+}
+.keypad-key:active { background: rgba(255, 255, 255, 0.24); }
+.keypad-key.wide-glyph { font-size: 2.8vh; }
+
+.keypad-foot { display: flex; align-items: center; gap: 0.8vw; }
+.keypad-enter {
+  flex: 1;
+  height: 8vh;
+  border: 0;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #35c98b, #1f9c68);
+  color: #fff;
+  font-size: 3vh;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.keypad-enter:disabled { opacity: 0.4; box-shadow: none; }
+.keypad-secondary {
+  height: 8vh; padding: 0 1.4vw; border-radius: 16px;
+  border: 1px solid rgba(160, 200, 245, 0.3); background: transparent;
+  color: rgba(220, 238, 255, 0.85); font-size: 2vh; font-weight: 700; cursor: pointer;
+}
+
+/* ---- Dosing method picker ---- */
+/* Each method is its own box, the way the dosing tiles on the Tank Log are.
+   Nine of them in one column ran off the bottom of a 600px panel, so
+   Moonshiners - eighth in the list - could only be found by discovering that
+   the card scrolls. Three across and three down puts every option on the page
+   at once, which is what a wall panel needs. */
+.dose-method-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.1vh 1vw;
+}
+.dose-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25vh;
+  text-align: left;
+  min-height: 13vh;
+  padding: 1.4vh 1.1vw;
+  border-radius: 16px;
+  border: 2px solid var(--panel-edge);
+  background: var(--inset);
+  color: var(--ink);
+  cursor: pointer;
+}
+.dose-tile:active { border-color: var(--accent); }
+.dose-tile.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--inset));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+.dose-tile-title { font-size: 2.3vh; font-weight: 800; line-height: 1.15; }
+.dose-tile-tag {
+  font-style: normal; font-size: 1.6vh; font-weight: 500; line-height: 1.3;
+  color: var(--muted);
+}
+/* Pushed to the bottom so the title and tagline line up across the row
+   however long the bottle list runs. */
+.dose-tile-bottles {
+  margin-top: auto; padding-top: 0.5vh;
+  font-size: 1.4vh; font-weight: 600; color: var(--accent);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+/* ---- Boot splash ----
+   Deep water that surfaces into the dashboard. Every animation here is
+   transform or opacity, runs once, and the component unmounts after. */
+.boot {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  overflow: hidden;
+  background: linear-gradient(180deg, #0a4a86 0%, #073462 55%, #052548 100%);
+  display: grid;
+  place-items: center;
+  opacity: 1;
+}
+.boot-out { animation: boot-dissolve 0.7s ease-in forwards; }
+@keyframes boot-dissolve { to { opacity: 0; } }
+
+/* the water lightening as we rise: a lighter layer fading in over the deep */
+.boot-water {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, #1e7fc4 0%, #0f5a9c 55%, #0a3f74 100%);
+  opacity: 0;
+  animation: boot-lighten 2.6s ease-in-out 0.4s forwards;
+}
+@keyframes boot-lighten { to { opacity: 1; } }
+
+/* one shaft of light, once, across the whole screen */
+.boot-shaft {
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  width: 28vw;
+  left: -40vw;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+  transform: skewX(-18deg);
+  animation: boot-shaft 1.6s ease-in-out 0.9s forwards;
+}
+@keyframes boot-shaft { to { transform: skewX(-18deg) translateX(190vw); } }
+
+.boot-bubble {
+  position: absolute;
+  bottom: -20px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 28%, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.35) 30%, rgba(255,255,255,0.06) 60%, rgba(255,255,255,0.2) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  opacity: 0;
+  animation: boot-rise linear infinite;
+}
+@keyframes boot-rise {
+  0%   { transform: translate3d(0, 0, 0) scale(0.6); opacity: 0; }
+  10%  { opacity: 0.8; }
+  50%  { transform: translate3d(var(--drift), -55vh, 0) scale(0.9); }
+  90%  { opacity: 0.6; }
+  100% { transform: translate3d(0, -112vh, 0) scale(1.05); opacity: 0; }
+}
+
+.boot-logo {
+  position: relative;
+  width: 78vh;                 /* 470px on the 1024x600 panel - matches the Plymouth theme and the wallpaper */
+  max-width: 70vw;
+  height: auto;
+  filter: drop-shadow(0 18px 40px rgba(2, 20, 45, 0.55));
+  opacity: 0;
+  transform: translateY(6vh) scale(0.9);
+  animation: boot-logo 1.1s cubic-bezier(0.22, 1.2, 0.36, 1) 0.15s forwards;
+  transform-origin: 50% 60%;
+}
+@keyframes boot-logo {
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* a thin line filling under the logo, so a slow boot reads as progress */
+.boot-line {
+  position: absolute;
+  bottom: 9vh;
+  left: 50%;
+  width: 22vw;
+  height: 3px;
+  margin-left: -11vw;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.18);
+  overflow: hidden;
+}
+.boot-line span {
+  display: block;
+  height: 100%;
+  width: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #2fd6ff, #7cf3c8);
+  transform: translateX(-100%);
+  animation: boot-line 2.5s cubic-bezier(0.4, 0, 0.2, 1) 0.4s forwards;
+}
+@keyframes boot-line { to { transform: translateX(0); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-bubble, .boot-shaft { animation: none; }
+  .boot-logo { animation-duration: 0.3s; }
+}
+
+/* ---- Alert box: loud until acknowledged ----
+   A pop-up in the middle of the screen over the dimmed dashboard, carrying
+   the reading and its last day so the tap is an informed one. Tapping zooms
+   it away; the next one pops in behind it. */
+.alert-dim {
+  position: fixed; inset: 0; z-index: 40;
+  background: rgba(5, 37, 72, 0.45);
+  display: grid; place-items: center;
+  animation: alert-dim-in 0.25s ease-out;
+}
+.alert-dim.is-leaving { animation: alert-dim-out 0.38s ease-in forwards; }
+@keyframes alert-dim-in { from { opacity: 0; } }
+@keyframes alert-dim-out { to { opacity: 0; } }
+
+.alert-card {
+  width: 62vw;
+  display: flex; flex-direction: column; gap: 1.4vh;
+  padding: 2.4vh 2.2vw;
+  border-radius: 22px;
+  background: var(--bad);
+  color: #fff;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  box-shadow: 0 24px 70px rgba(220, 38, 38, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.08);
+  animation: alert-pop 0.42s cubic-bezier(0.22, 1.25, 0.36, 1);
+  transform-origin: 50% 50%;
+}
+@keyframes alert-pop { from { opacity: 0; transform: scale(0.8); } }
+.alert-card.is-leaving { animation: alert-zoom-away 0.38s cubic-bezier(0.55, 0, 0.8, 0.4) forwards; }
+@keyframes alert-zoom-away { to { opacity: 0; transform: scale(0.35); } }
+
+.alert-top { display: flex; align-items: center; gap: 1vw; }
+.alert-mark {
+  width: 6vh; height: 6vh; flex-shrink: 0;
+  border-radius: 14px; background: #fff; color: var(--bad);
+  display: grid; place-items: center;
+}
+.alert-mark svg { width: 3.6vh; height: 3.6vh; }
+.alert-head { font-size: 4vh; font-weight: 800; line-height: 1.1; letter-spacing: -0.01em; }
+.alert-reading { display: flex; align-items: center; gap: 2vw; }
+.alert-value { font-size: 9vh; font-weight: 800; line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.alert-value small { font-size: 2.4vh; font-weight: 600; margin-left: 0.5vw; opacity: 0.9; letter-spacing: 0; }
+.alert-facts { display: flex; flex-direction: column; gap: 0.4vh; font-size: 2.3vh; font-weight: 600; opacity: 0.95; }
+.alert-text { font-size: 2.8vh; font-weight: 600; opacity: 0.95; line-height: 1.35; }
+.alert-card .hc-spark { width: 100%; height: 9vh; }
+.alert-card .hc-spark-band { fill: rgba(255, 255, 255, 0.16); }
+.alert-card .hc-spark .hc-spark-line, .alert-card .hc-spark.is-crit .hc-spark-line, .alert-card .hc-spark.is-warn .hc-spark-line { stroke: #fff; stroke-width: 2.4px; }
+.alert-card .hc-spark .hc-spark-dot, .alert-card .hc-spark.is-crit .hc-spark-dot, .alert-card .hc-spark.is-warn .hc-spark-dot { stroke: #fff; }
+.alert-ack {
+  align-self: flex-end;
+  display: flex; flex-direction: column; align-items: center; gap: 0.2vh;
+  background: #fff; color: var(--bad);
+  border: none; border-radius: 999px;
+  padding: 1.6vh 3vw;
+  font: inherit; font-size: 2.8vh; font-weight: 800;
+  cursor: pointer;
+}
+.alert-ack:active { transform: scale(0.97); }
+.alert-ack small { font-size: 1.5vh; font-weight: 700; opacity: 0.7; }
+
+/* ---- The logo where the product introduces itself ---- */
+.setup-logo { height: 26vh; width: auto; margin: 0 auto 1vh; display: block; filter: drop-shadow(0 6px 18px rgba(4, 20, 45, 0.25)); }
+.phone-logo { height: 96px; width: auto; display: block; margin: 0 auto 4px; }
+
+/* The intro loop as the screensaver: the splash fills the idle layer; the
+   .boot element is position:fixed already, so it simply covers the screen. */
+.slideshow-intro { background: #052548; }
+.boot.boot-loop .boot-line { display: none; }   /* no progress line - nothing is loading */
+/* .slideshow img is written for photographs (fill the screen, one fade) and
+   would swallow the logo's own size and animation; give the logo its back. */
+.slideshow-intro img.boot-logo {
+  width: 78vh; height: auto; object-fit: initial;
+  animation: boot-logo 1.1s cubic-bezier(0.22, 1.2, 0.36, 1) 0.15s forwards;
+}
+
+/* The full room-air view when the sensor has stopped reporting. */
+.env-stale {
+  margin: 0 0 1.6vh;
+  padding: 1.4vh 1.6vw;
+  border-radius: 14px;
+  background: var(--inset);
+  border: 1px dashed var(--panel-edge);
+  color: var(--ink-2);
+  font-size: 2.1vh;
+  font-weight: 600;
+}
+.env-grid.is-stale .tile-value { color: var(--muted); }
+
+/* The support code, meant to be read aloud off the screen. */
+.support-code {
+  font-size: 9vh;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  padding: 1vh 0;
+}
+.support-meta { text-align: center; font-size: 2vh; font-weight: 600; color: var(--ink-2); }
+.support-live { color: var(--ok); font-weight: 800; }

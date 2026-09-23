@@ -1,0 +1,20 @@
+# Installed by pi/install.sh, which substitutes __USER__ and __HOME__ for the
+# account actually running the terminal. Do not hardcode a username here: Pi OS
+# images no longer ship a "pi" user by default, and a wrong User= makes the
+# unit fail on a customer's device with no obvious cause.
+
+[Unit]
+Description=ReefGauge server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__HOME__/reef-terminal/server
+ExecStart=/usr/bin/node src/index.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,15 @@
+[Unit]
+Description=SCD41 CO2 sensor daemon
+After=reef-server.service
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__HOME__/reef-terminal/sensor
+Environment=SERVER_URL=http://127.0.0.1:8080
+ExecStart=__HOME__/reef-terminal/sensor/.venv/bin/python co2_daemon.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

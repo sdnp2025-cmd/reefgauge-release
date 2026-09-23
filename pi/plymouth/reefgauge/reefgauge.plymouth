@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=ReefGauge
+Description=ReefGauge boot screen - deep water, the logo rising
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/reefgauge
+ScriptFile=/usr/share/plymouth/themes/reefgauge/reefgauge.script
