@@ -16,5 +16,18 @@ releases.
 Installing on a Raspberry Pi: `pi/install.sh`. A terminal built from an SD
 card runs it for you.
 
-Issues and pull requests are welcome, but this repository is generated: fixes
-land in the development repository and appear here in the next release.
+## License
+
+Copyright (c) 2026 Scott Deyo. All rights reserved. See `LICENSE`.
+
+This repository is public so that ReefGauge terminals can update themselves,
+not as an offer of permission. If you own a ReefGauge, your terminal is
+licensed and this is where its updates come from. Anything else — running it
+on your own hardware, reusing the code, building a device from it — needs
+written permission: hello@reefgauge.com.
+
+REEFGAUGE and the ReefGauge logo are trademarks. The brand files here are
+present because a terminal displays them; they are not licensed for use.
+
+This repository is generated, so pull requests cannot be accepted here. Bug
+reports are genuinely welcome — open an issue, or write to the address above.

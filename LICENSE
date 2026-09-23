@@ -1,0 +1,56 @@
+ReefGauge
+Copyright (c) 2026 Scott Deyo. All rights reserved.
+
+This repository is public so that ReefGauge terminals can update themselves.
+A shipped unit is a git checkout and pulls its releases from here with no
+credentials, which is only possible if the repository can be read by anyone.
+
+That is the whole reason it is readable. It is not an offer of permission.
+
+
+NO LICENSE IS GRANTED
+
+No license to use, copy, modify, merge, publish, distribute, sublicense or
+sell this software, or any part of it, is granted to anyone.
+
+By hosting this repository on GitHub, the copyright holder grants the rights
+described in GitHub's Terms of Service and nothing further: other GitHub
+users may view the repository and fork it on GitHub. Those terms do not grant
+the right to run this software, to modify it, or to distribute it, and no
+such right is granted anywhere else.
+
+The one exception is the intended one. A ReefGauge terminal supplied by the
+copyright holder is licensed to the person it was supplied to, for that
+terminal, including every update it downloads from this repository for as
+long as it is in service. That license runs with the terminal and transfers
+with it if the terminal is sold or given away.
+
+If you want to do anything else with this software, ask. Permission is
+granted in writing or not at all.
+
+    hello@reefgauge.com
+
+
+TRADEMARKS
+
+REEFGAUGE, the ReefGauge name and the ReefGauge logo are trademarks of the
+copyright holder.
+
+Logo and brand files appear in this repository because a terminal displays
+them while it is running. Their presence here grants no right to use them.
+No permission is given to apply the ReefGauge name or logo to any product,
+device, service, website, package or promotional material.
+
+
+NO WARRANTY
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+ReefGauge reports on a living system. It is a monitor, not a life-support
+device, and nothing it shows is a substitute for your own testing and your
+own judgement. Do not rely on it alone to keep animals alive.
