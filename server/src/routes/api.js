@@ -20,6 +20,73 @@ function radarUrl(weather) {
 export default async function apiRoutes(app, { config, state, db }) {
   const photosDir = path.join(path.dirname(config.db), 'photos')
   fs.mkdirSync(photosDir, { recursive: true })
+  // ---- Ranges ----
+  //
+  // The numbers every alarm on this terminal is measured against, and until
+  // now the only config with no way to change them: not an endpoint, not a
+  // screen, only hand-editing config.json over SSH. A customer who keeps their
+  // tank at 1.024 rather than 1.026 had no way to stop it telling them they
+  // were wrong twice a day.
+  //
+  // alerts.js reads config.ranges at evaluation time, so a change takes effect
+  // on the next check with nothing to restart.
+
+  // Generous bounds - wide enough for anyone's husbandry, narrow enough to
+  // catch a misplaced decimal. That matters more here than anywhere else in
+  // the config: a temperature range typed as 770-790 does not look obviously
+  // wrong in a form, and it silently disables the alarm that protects the
+  // livestock. Refusing is the kind thing to do.
+  const RANGE_LIMITS = {
+    temp: [60, 95], ph: [6.5, 9], salinity: [25, 40], alk: [4, 16],
+    ca: [250, 600], mg: [900, 2000], no3: [0, 100], po4: [0, 2]
+  }
+
+  const rangesView = () => Object.fromEntries(
+    Object.keys(PARAM_META).map((k) => [k, {
+      ...PARAM_META[k],
+      range: config.ranges?.[k] ?? null,
+      limits: RANGE_LIMITS[k]
+    }])
+  )
+
+  app.get('/api/ranges', async () => ({ ranges: rangesView() }))
+
+  app.post('/api/ranges', async (req, reply) => {
+    const patch = {}
+    for (const [key, value] of Object.entries(req.body ?? {})) {
+      if (!(key in PARAM_META)) return reply.code(400).send({ error: `unknown parameter "${key}"` })
+      if (!Array.isArray(value) || value.length !== 2) {
+        return reply.code(400).send({ error: `${key} needs a low and a high, as [low, high]` })
+      }
+      const [low, high] = value.map(Number)
+      if (!Number.isFinite(low) || !Number.isFinite(high)) {
+        return reply.code(400).send({ error: `${key} needs two numbers` })
+      }
+      if (low >= high) {
+        return reply.code(400).send({ error: `${key}: the low (${low}) must be below the high (${high})` })
+      }
+      const [min, max] = RANGE_LIMITS[key]
+      if (low < min || high > max) {
+        return reply.code(400).send({
+          error: `${key} must sit between ${min} and ${max} ${PARAM_META[key].unit}`.trim()
+        })
+      }
+      patch[key] = [low, high]
+    }
+    if (!Object.keys(patch).length) return reply.code(400).send({ error: 'nothing to change' })
+
+    config.ranges = { ...config.ranges, ...patch }
+
+    let persisted = false
+    if (!config.isExample && fs.existsSync(config.configPath)) {
+      const onDisk = JSON.parse(fs.readFileSync(config.configPath, 'utf8'))
+      onDisk.ranges = { ...onDisk.ranges, ...patch }
+      saveConfigAtomic(config.configPath, onDisk)
+      persisted = true
+    }
+    return { ok: true, changed: Object.keys(patch), ranges: rangesView(), persisted }
+  })
+
   // ---- Tank ----
   app.get('/api/tank/latest', async () => {
     const params = {}

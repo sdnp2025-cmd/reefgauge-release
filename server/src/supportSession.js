@@ -50,6 +50,8 @@ const ALLOW = [
   ['POST', /^\/api\/alerts\/sounds$/],          // tones, quiet hours
   ['POST', /^\/api\/slideshow\/config$/],       // screensaver and its timer
   ['POST', /^\/api\/environment\/calibrate$/],  // room-air temperature offset
+  ['GET',  /^\/api\/ranges$/],
+  ['POST', /^\/api\/ranges$/],                 // the thresholds every alarm uses
 
   // Probes. These change nothing and are how you find out why an Apex is not
   // answering or which Red Sea units are actually on the network.
@@ -67,7 +69,7 @@ const ALLOW = [
 
 // Writes get recorded. The customer is told what was changed, and "it stopped
 // working after support touched it" becomes a question with an answer.
-const WRITES = /^\/api\/(setup\/complete|alerts\/sounds|slideshow\/config|environment\/calibrate)$/
+const WRITES = /^\/api\/(setup\/complete|alerts\/sounds|slideshow\/config|environment\/calibrate|ranges)$/
 const AUDIT_MAX = 100
 
 const allowed = (method, path) => ALLOW.some(([m, re]) => m === method && re.test(path))
