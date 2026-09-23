@@ -87,8 +87,10 @@ export function createSupportSession({ config, state, log = console }) {
   function connect() {
     const url = `${relayUrl()}/terminal`
     try {
+      // Same constraint as the support tool: Node's WebSocket has no way to
+      // set a request header, so an enrol key travels as the subprotocol.
       ws = new WebSocket(url, config.support?.enrollKey
-        ? { headers: { authorization: `Bearer ${config.support.enrollKey}` } }
+        ? ['reefgauge-terminal', config.support.enrollKey]
         : undefined)
     } catch (err) {
       reset(`could not reach the support relay: ${err.message}`)
