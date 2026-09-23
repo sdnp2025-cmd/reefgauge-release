@@ -22,6 +22,42 @@ function Countdown({ until }) {
   return <span>{m}:{String(s).padStart(2, '0')}</span>
 }
 
+// What support changed, in the customer's words rather than ours. Shown
+// whether or not a session is open: "it has been wrong since someone looked at
+// it" is something people say a week later, and this is the answer.
+const FIELD_NAMES = {
+  tankName: 'the tank name',
+  apex: 'the Apex controller',
+  redSea: 'the Red Sea equipment',
+  location: 'the location',
+  slideshow: 'the screensaver',
+  sound: 'the alarm sounds',
+  idleMinutes: 'the screensaver timer',
+  tempOffsetC: 'the room-air calibration'
+}
+
+function Changes({ changes }) {
+  if (!changes?.length) return null
+  return (
+    <div className="support-changes">
+      <h2>What support has changed</h2>
+      {changes.slice().reverse().map((c, i) => (
+        <div key={i} className="support-change">
+          <span className="support-change-when">
+            {new Date(c.at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+          </span>
+          <span>
+            {c.fields?.length
+              ? c.fields.map((f) => FIELD_NAMES[f] ?? f).join(', ')
+              : 'a setting'}
+            {c.status >= 400 ? ' — did not save' : ''}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export default function SupportPanel() {
   const [session, setSession] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -75,10 +111,12 @@ export default function SupportPanel() {
         </div>
         <p className="setup-note">
           While this is open, support can see how the terminal is working — its health, its logs,
-          and which of your equipment is answering — and can restart it. They cannot see your
-          photos, your coral journal or your test history.
+          and which of your equipment is answering — and can restart it or change its settings.
+          Anything they change is listed below. They cannot see your photos, your coral journal
+          or your test history.
         </p>
         <button className="setup-primary danger" onClick={end} disabled={busy}>End the session now</button>
+        <Changes changes={session.changes} />
         {error && <div className="setup-error">{error}</div>}
       </div>
     )
@@ -94,11 +132,13 @@ export default function SupportPanel() {
       </p>
       <p className="setup-note">
         The session ends on its own after an hour, and you can end it any time. Support sees how
-        the terminal is working, not your tank's photos or history.
+        the terminal is working, not your tank's photos or history, and anything they change is
+        listed here afterwards.
       </p>
       <button className="setup-primary" onClick={start} disabled={busy}>
         {busy ? 'Opening…' : 'Get support'}
       </button>
+      <Changes changes={session?.changes} />
       {session?.error && <div className="setup-error">{session.error}</div>}
       {error && <div className="setup-error">{error}</div>}
     </div>
