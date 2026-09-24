@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { api, waitForServer } from '../api.js'
 import OnScreenKeyboard from './OnScreenKeyboard.jsx'
 import UpdatePanel from './UpdatePanel.jsx'
+import WifiByPhone from './WifiByPhone.jsx'
 
 // Inline icons — the Pi image has no color-emoji font, so emoji render as
 // empty boxes on the customer's very first screen.
@@ -338,6 +339,7 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
                   ))}
                 </div>
                 <button className="setup-skip" onClick={scanWifi} disabled={busy}>↻ Rescan</button>
+                <WifiByPhone onDone={(ssid) => { setWifiOk(ssid); setPickedSsid(null) }} />
                 <button className="setup-skip" onClick={single ? onExit : next}>{single ? 'Done' : 'Skip (using ethernet) ›'}</button>
               </>
             )}

@@ -334,6 +334,130 @@ async function connectWifi(ssid, password) {
   }
 }
 
+  // ---- setup over the customer's phone -------------------------------------
+  //
+  // Typing a Wi-Fi password on a wall panel with an on-screen keyboard is the
+  // worst thing this product asks anyone to do. It is a long string of mixed
+  // case and symbols, entered by finger, at arm's length, usually printed on
+  // the underside of a router.
+  //
+  // So don't. The terminal raises its own network, shows a QR for it, and the
+  // customer's phone joins with one tap - the WIFI: payload below is the
+  // format both iOS and Android cameras already understand, so there is no app
+  // to install. A second QR then opens the setup page on the phone, where the
+  // home network's password autofills from the phone's own keychain.
+  //
+  // The Pi has one radio and cannot hold the hotspot up while joining
+  // something else, so the hotspot comes down to connect. That is the whole
+  // reason for the watchdog: if it comes down and nothing comes back up, the
+  // terminal is on no network at all, in someone's house, on a wall.
+
+  const HOTSPOT_CON = 'reefgauge-setup'
+  const HOTSPOT_MAX_MS = 15 * 60 * 1000
+  let hotspot = null          // { ssid, password, previous, startedAt, timer }
+
+  // Semicolons, commas, colons and backslashes all have meaning inside a WIFI:
+  // payload. Rather than escape them, generate values that cannot contain one.
+  const nonAmbiguous = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  const pick = (n) => Array.from(crypto.randomBytes(n)).map((b) => nonAmbiguous[b % nonAmbiguous.length]).join('')
+
+  /// Whatever the terminal was connected to before, so a failure has somewhere
+  /// to go back to.
+  async function activeWifiConnection() {
+    try {
+      const out = await nmcli(['-t', '-f', 'NAME,TYPE,DEVICE', 'connection', 'show', '--active'])
+      const row = out.split('\n').map(splitFields)
+        .find((f) => f[1] === '802-11-wireless' && f[0] !== HOTSPOT_CON)
+      return row?.[0] ?? null
+    } catch { return null }
+  }
+
+  async function stopHotspot() {
+    if (hotspot?.timer) clearTimeout(hotspot.timer)
+    try { await nmcli(['connection', 'down', HOTSPOT_CON]) } catch { /* not up */ }
+    try { await nmcli(['connection', 'delete', HOTSPOT_CON]) } catch { /* not there */ }
+    const previous = hotspot?.previous ?? null
+    hotspot = null
+    return previous
+  }
+
+  /// Puts the terminal back where it was. Called when the customer gives up,
+  /// when a join fails, and by the watchdog - the three ways a setup attempt
+  /// can end with the terminal on nothing.
+  async function restorePrevious(previous) {
+    if (!previous) return false
+    try { await nmcli(['connection', 'up', previous]); return true } catch { return false }
+  }
+
+  app.get('/api/setup/wifi/hotspot', async () => hotspot
+    ? { active: true, ssid: hotspot.ssid, expiresAt: hotspot.startedAt + HOTSPOT_MAX_MS }
+    : { active: false })
+
+  app.post('/api/setup/wifi/hotspot', async (req, reply) => {
+    if (!isLocalRequest(req)) {
+      return reply.code(403).send({ error: 'this can only be started on the terminal itself' })
+    }
+    if (hotspot) return hotspotPayload()
+
+    const dev = await wifiDevice()
+    const previous = await activeWifiConnection()
+    const ssid = `ReefGauge-${pick(4)}`
+    const password = pick(10)
+
+    try {
+      await nmcli(['device', 'wifi', 'hotspot', 'ifname', dev,
+                   'con-name', HOTSPOT_CON, 'ssid', ssid, 'password', password])
+    } catch (err) {
+      await restorePrevious(previous)
+      return reply.code(500).send({
+        error: `Could not start the terminal's own network: ${String(err.stderr ?? err.message ?? err).trim()}`
+      })
+    }
+
+    hotspot = { ssid, password, previous, startedAt: Date.now(), timer: null }
+    // Nobody finishes setup in fifteen minutes and then needs another hour. If
+    // they walked away, the terminal should be back on the network it knew
+    // rather than sitting as an open-ended access point.
+    hotspot.timer = setTimeout(async () => {
+      const prev = await stopHotspot()
+      await restorePrevious(prev)
+      app.log.warn('setup hotspot expired; restored the previous connection')
+    }, HOTSPOT_MAX_MS)
+
+    return hotspotPayload()
+  })
+
+  app.delete('/api/setup/wifi/hotspot', async () => {
+    const previous = await stopHotspot()
+    const restored = await restorePrevious(previous)
+    return { active: false, restored }
+  })
+
+  async function hotspotPayload() {
+    // The terminal is the gateway of the network it just raised; NetworkManager
+    // hands it 10.42.0.1 unless told otherwise, but read it rather than assume.
+    let ip = '10.42.0.1'
+    try {
+      const dev = await wifiDevice()
+      const out = await nmcli(['-g', 'IP4.ADDRESS', 'device', 'show', dev])
+      const first = out.split('\n').find(Boolean)
+      if (first) ip = first.split('/')[0].replace(/\\/g, '')
+    } catch { /* the default is right on a stock install */ }
+
+    const { nonce } = mintSession([...PHONE_SCOPES])
+    const setupUrl = `http://${ip}:${config.port ?? 8080}/?rt=${nonce}`
+    const wifiPayload = `WIFI:S:${hotspot.ssid};T:WPA;P:${hotspot.password};;`
+
+    return {
+      active: true,
+      ssid: hotspot.ssid,
+      setupUrl,
+      expiresAt: hotspot.startedAt + HOTSPOT_MAX_MS,
+      wifiSvg: await QRCode.toString(wifiPayload, { type: 'svg', margin: 1 }),
+      setupSvg: await QRCode.toString(setupUrl, { type: 'svg', margin: 1 })
+    }
+  }
+
   app.post('/api/setup/wifi/connect', async (req, reply) => {
     const { ssid, password } = req.body ?? {}
     if (!ssid) return reply.code(400).send({ error: 'ssid required' })
@@ -343,6 +467,17 @@ async function connectWifi(ssid, password) {
       demoSsid = ssid
       return { ok: true, ssid }
     }
+    // One radio: the hotspot has to come down before anything else can be
+    // joined. If the join then fails we are on nothing at all, so the hotspot
+    // goes straight back up - the phone reconnects to it and the customer gets
+    // to try the password again instead of staring at a dead panel.
+    // Keep the credentials, not just the fact there was one: bringing the
+    // hotspot back under a new name would leave the phone looking for a
+    // network that no longer exists, which is worse than never having had it.
+    const had = hotspot ? { ssid: hotspot.ssid, password: hotspot.password } : null
+    let previous = null
+    if (had) previous = await stopHotspot()
+
     try {
       await connectWifi(ssid, password ?? '')
       return { ok: true, ssid }
@@ -357,6 +492,18 @@ async function connectWifi(ssid, password) {
         friendly = `Could not find ${ssid}. Check the name, and that the terminal is in range.`
       } else if (/timeout|timed out/i.test(msg)) {
         friendly = 'The network did not answer. Move closer, or try again.'
+      }
+      if (had) {
+        try {
+          const dev = await wifiDevice()
+          await nmcli(['device', 'wifi', 'hotspot', 'ifname', dev, 'con-name', HOTSPOT_CON,
+                       'ssid', had.ssid, 'password', had.password])
+          hotspot = { ...had, previous, startedAt: Date.now(), timer: null }
+          hotspot.timer = setTimeout(async () => {
+            const prev = await stopHotspot()
+            await restorePrevious(prev)
+          }, HOTSPOT_MAX_MS)
+        } catch { await restorePrevious(previous) }
       }
       return reply.code(400).send({ error: friendly })
     }
