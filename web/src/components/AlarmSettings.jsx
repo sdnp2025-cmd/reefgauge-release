@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { api } from '../api.js'
+import PhoneAlerts from './PhoneAlerts.jsx'
 
 // Choosing an alarm is the one setting nobody can get right by reading a
 // description — "captivating" and "annoying" are the same sound at 3am. So
@@ -147,6 +148,8 @@ export default function AlarmSettings() {
           <button onClick={() => save({ loopMinutes: Math.min(30, data.loopMinutes + 1) })}>›</button>
         </div>
       </div>
+
+      <PhoneAlerts />
 
       {error && <div className="setup-error">{error}</div>}
     </div>

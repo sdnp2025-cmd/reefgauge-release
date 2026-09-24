@@ -3192,3 +3192,31 @@ body {
 .support-changes h2 { font-size: 17px; opacity: .8; margin: 0 0 8px; font-weight: 600; }
 .support-change { display: flex; gap: 12px; padding: 6px 0; font-size: 16px; }
 .support-change-when { opacity: .6; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* Phone alerts. The QR is the whole interaction, so it gets the room — this is
+   read from a couple of feet away by someone holding a phone up to a wall. */
+.phone-alerts { margin-top: 28px; border-top: 1px solid rgba(255,255,255,.12); padding-top: 18px; }
+.phone-alerts h2 { font-size: 21px; font-weight: 600; margin: 0 0 6px; }
+.phone-alerts-body { display: flex; gap: 22px; align-items: flex-start; margin: 14px 0; }
+.phone-alerts-qr {
+  flex-shrink: 0; width: 210px; height: 210px; padding: 12px;
+  background: #fff; border-radius: 12px;
+}
+.phone-alerts-qr svg { width: 100%; height: 100%; display: block; }
+.phone-alerts-steps { flex: 1; min-width: 0; }
+.phone-alerts-steps ol { margin: 0 0 10px; padding-left: 22px; font-size: 18px; line-height: 1.6; }
+.phone-alerts-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.phone-alerts-foot { display: flex; gap: 20px; margin-top: 8px; }
+.phone-alerts-danger {
+  margin-top: 14px; padding: 14px; border-radius: 10px;
+  background: rgba(214,122,32,.14);
+}
+.phone-alerts-danger b { font-size: 18px; }
+
+/* A tertiary action: present, reachable with a fingertip, not competing with
+   the thing the panel is actually for. */
+.hub-linkish {
+  background: none; border: 0; padding: 10px 0; font: inherit; font-size: 16px;
+  color: inherit; opacity: .62; text-decoration: underline; cursor: pointer;
+}
+.hub-linkish:active { opacity: 1; }

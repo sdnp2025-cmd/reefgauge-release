@@ -1,5 +1,7 @@
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
+import QRCode from 'qrcode'
 import { PARAM_META, saveConfigAtomic } from '../config.js'
 import { PHOTO_EXTENSIONS, CONVERTED_EXTENSIONS, processPhoto } from '../photoIntake.js'
 import { isLocalRequest } from '../phoneSession.js'
@@ -403,6 +405,73 @@ export default async function apiRoutes(app, { config, state, db }) {
   })
 
   // ---- Alerts ----
+  // ---- phone alerts --------------------------------------------------------
+  //
+  // The tank tells the wall it is in trouble whether or not anyone is standing
+  // in front of it. This is how it reaches a phone, and until now there was no
+  // way to switch it on: the send path existed, the diagnostics reported it
+  // missing, and nothing anywhere let a customer set it.
+  //
+  // ntfy.sh, because it needs no account on either end - the terminal POSTs to
+  // a topic and every phone in the house subscribes to it. The whole cost of
+  // that is that a topic is a bearer secret: anyone who knows the name can read
+  // a family's alarms AND publish to them, which is the worse half - a stranger
+  // able to invent a 3am alarm about someone's tank. So the topic is 120 random
+  // bits generated here and never shown as something to type.
+
+  const phoneState = () => {
+    const topic = config.alerts?.ntfyTopic ?? null
+    const server = (config.alerts?.ntfyServer ?? 'https://ntfy.sh').replace(/\/$/, '')
+    return { enabled: !!topic, subscribeUrl: topic ? `${server}/${topic}` : null }
+  }
+
+  app.get('/api/alerts/phone', async () => {
+    const state = phoneState()
+    if (!state.subscribeUrl) return state
+    return { ...state, svg: await QRCode.toString(state.subscribeUrl, { type: 'svg', margin: 1 }) }
+  })
+
+  app.post('/api/alerts/phone', async (req, reply) => {
+    // Regenerating is how you revoke: an old topic keeps working for whoever
+    // still has it, so "my ex-flatmate still gets my tank alarms" has an answer
+    // that does not involve support.
+    const existing = config.alerts?.ntfyTopic
+    if (existing && req.body?.regenerate !== true) {
+      const state = phoneState()
+      return { ...state, svg: await QRCode.toString(state.subscribeUrl, { type: 'svg', margin: 1 }) }
+    }
+
+    // base32-ish alphabet: no vowels, no look-alikes. Nobody should ever need
+    // to read this out, but if they do it should not be ambiguous.
+    const alphabet = '23456789bcdfghjkmnpqrstvwxyz'
+    const bytes = crypto.randomBytes(24)
+    let topic = 'reefgauge-'
+    for (const b of bytes) topic += alphabet[b % alphabet.length]
+
+    config.alerts = { ...config.alerts, ntfyTopic: topic }
+    if (!config.isExample && fs.existsSync(config.configPath)) {
+      const onDisk = JSON.parse(fs.readFileSync(config.configPath, 'utf8'))
+      onDisk.alerts = { ...onDisk.alerts, ntfyTopic: topic }
+      saveConfigAtomic(config.configPath, onDisk)
+    }
+
+    const state = phoneState()
+    return { ...state, regenerated: !!existing,
+             svg: await QRCode.toString(state.subscribeUrl, { type: 'svg', margin: 1 }) }
+  })
+
+  app.delete('/api/alerts/phone', async () => {
+    config.alerts = { ...config.alerts, ntfyTopic: '' }
+    if (!config.isExample && fs.existsSync(config.configPath)) {
+      const onDisk = JSON.parse(fs.readFileSync(config.configPath, 'utf8'))
+      onDisk.alerts = { ...onDisk.alerts, ntfyTopic: '' }
+      saveConfigAtomic(config.configPath, onDisk)
+    }
+    // Phones already subscribed simply stop hearing anything, because nothing
+    // is published to that topic again.
+    return phoneState()
+  })
+
   app.post('/api/alerts/test', async (req, reply) => {
     try {
       await sendNtfy(config, {
