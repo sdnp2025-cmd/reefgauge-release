@@ -7,6 +7,7 @@ import UpdatePanel from './UpdatePanel.jsx'
 import AlarmSettings from './AlarmSettings.jsx'
 import ScreensaverSettings from './ScreensaverSettings.jsx'
 import BackupPanel from './BackupPanel.jsx'
+import PhoneAlerts from './PhoneAlerts.jsx'
 import SupportPanel from './SupportPanel.jsx'
 import DosingSettings from './DosingSettings.jsx'
 import OnScreenKeyboard from './OnScreenKeyboard.jsx'
@@ -35,7 +36,8 @@ const Ico = {
   download: <svg {...S}><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M4 21h16" /></svg>,
   warning: <svg {...S}><path d="M12 3.5 22 20H2z" /><path d="M12 10v4.5" /><path d="M12 17.4h.01" /></svg>,
   lifebuoy: <svg {...S}><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="3.6" /><path d="m5.6 5.6 3.9 3.9" /><path d="m14.5 14.5 3.9 3.9" /><path d="m18.4 5.6-3.9 3.9" /><path d="m9.5 14.5-3.9 3.9" /></svg>,
-  archive: <svg {...S}><path d="M3 7h18v13H3z" /><path d="M3 7l2-3h14l2 3" /><path d="M10 12h4" /></svg>
+  archive: <svg {...S}><path d="M3 7h18v13H3z" /><path d="M3 7l2-3h14l2 3" /><path d="M10 12h4" /></svg>,
+  phone: <svg {...S}><rect x="7" y="2.5" width="10" height="19" rx="2.2" /><path d="M11 18.6h2" /></svg>
 }
 
 const SCREENSAVER_LINE = {
@@ -89,6 +91,18 @@ const SECTIONS = [
     title: 'Alarms & sounds',
     line: (s) => (s.alarms?.enabled === false ? 'Silent — no sound will play' : `Urgent: ${s.alarms?.urgentTone ?? 'siren'} · Warning: ${s.alarms?.warningTone ?? 'alert'}`),
     bad: (s) => s.alarms?.enabled === false
+  },
+  {
+    id: 'phone',
+    icon: 'phone',
+    title: 'Phone alerts',
+    // Its own tile rather than a section inside Alarms & sounds: on a 1024x600
+    // panel that put it below the fold, and this screen is scrolled with a
+    // fingertip that arrives as a mouse click. A setting nobody can reach is
+    // not configurable, and this is the half of the alarm that works when the
+    // tank goes wrong at 3am and nobody is in the room.
+    line: (s) => (s.phoneAlerts ? 'Alarms also go to your phone' : 'Not set up — alarms stay on the wall'),
+    bad: (s) => !s.phoneAlerts
   },
   { id: 'photos', icon: 'picture', title: 'Photos', line: (s) => (s.photos ? `${s.photos} on the terminal` : 'None added yet') },
   {
@@ -292,6 +306,7 @@ export default function SettingsHub({ onExit }) {
   if (open === 'dosing') return panel('Dosing', <DosingSettings />)
   if (open === 'update') return panel('Update', <div className="setup-body"><h1>Software update</h1><UpdatePanel /></div>, 'Done')
   if (open === 'backup') return panel('Backup', <BackupPanel />, 'Done')
+  if (open === 'phone') return panel('Phone alerts', <PhoneAlerts />, 'Done')
   if (open === 'support') return panel('Support', <SupportPanel />, 'Done')
   if (open === 'reset') {
     return (

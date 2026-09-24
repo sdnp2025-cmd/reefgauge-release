@@ -53,8 +53,8 @@ export default function PhoneAlerts() {
 
   if (!state.enabled) {
     return (
-      <div className="phone-alerts">
-        <h2>Phone alerts</h2>
+      <div className="setup-body phone-alerts">
+        <h1>Phone alerts</h1>
         <p className="setup-note">
           The panel sounds an alarm whether or not anyone is in the room. This also sends it
           to your phone — so you hear about the tank at 3am, or from work.
@@ -68,8 +68,8 @@ export default function PhoneAlerts() {
   }
 
   return (
-    <div className="phone-alerts">
-      <h2>Phone alerts</h2>
+    <div className="setup-body phone-alerts">
+      <h1>Phone alerts</h1>
       <div className="phone-alerts-body">
         <div
           className="phone-alerts-qr"

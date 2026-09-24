@@ -3195,8 +3195,7 @@ body {
 
 /* Phone alerts. The QR is the whole interaction, so it gets the room — this is
    read from a couple of feet away by someone holding a phone up to a wall. */
-.phone-alerts { margin-top: 28px; border-top: 1px solid rgba(255,255,255,.12); padding-top: 18px; }
-.phone-alerts h2 { font-size: 21px; font-weight: 600; margin: 0 0 6px; }
+.phone-alerts-body { }
 .phone-alerts-body { display: flex; gap: 22px; align-items: flex-start; margin: 14px 0; }
 .phone-alerts-qr {
   flex-shrink: 0; width: 210px; height: 210px; padding: 12px;
