@@ -57,6 +57,34 @@ echo "==> Server dependencies"
 echo "==> Rebuilding dashboard"
 (cd web && npm install && npm run build)
 
+# Look at what the build produced, do not just believe its exit code.
+#
+# This is not hypothetical. A brownout during a build once left index.html,
+# the JS and the CSS all zero bytes, with vite exiting 0 - so the ERR trap
+# never fired, the snapshot below was discarded, and the terminal served an
+# empty page. The kiosk rendered a blank white screen, the alarms kept
+# sounding, and the diagnostics said the display was fine, because the browser
+# was indeed running. It was just drawing nothing.
+#
+# An exit code says the program thought it succeeded. The files say whether it
+# did.
+verify_dashboard() {
+  local idx=web/dist/index.html
+  [ -s "$idx" ] || { echo "!! $idx is missing or empty"; return 1; }
+  [ "$(wc -c < "$idx")" -ge 200 ] || { echo "!! $idx is implausibly small"; return 1; }
+
+  local asset
+  asset=$(grep -oE '/assets/[^"]+\.js' "$idx" | head -1)
+  [ -n "$asset" ] || { echo "!! $idx references no script"; return 1; }
+  [ -s "web/dist$asset" ] || { echo "!! web/dist$asset is missing or empty"; return 1; }
+  # A real bundle is hundreds of KB. Anything under 10 KB is a truncated write,
+  # not a lean build.
+  [ "$(wc -c < "web/dist$asset")" -ge 10240 ] || { echo "!! web/dist$asset is truncated"; return 1; }
+  echo "    dashboard verified ($(wc -c < "web/dist$asset") bytes of script)"
+}
+
+verify_dashboard || rollback
+
 # Only now is the new build good; drop the snapshot and stop rolling back.
 trap - ERR
 rm -rf web/dist.prev

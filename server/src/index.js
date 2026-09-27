@@ -127,9 +127,60 @@ fs.mkdirSync(coralDir, { recursive: true })
 await app.register(fastifyStatic, { root: coralDir, prefix: '/coral-photos/', decorateReply: false })
 
 // Serve the built dashboard when web/dist exists (production on the Pi).
+//
+// And check it is actually there. A build interrupted by a brownout leaves
+// index.html and the bundle at zero bytes while exiting cleanly, and the kiosk
+// then draws a white screen for as long as nobody notices - alarms sounding,
+// tank unmonitored on screen, nothing anywhere saying why. A blank page is the
+// one failure that explains nothing, so if the dashboard is not intact this
+// serves a page that does.
 const webDist = path.resolve(config.serverRoot, '../web/dist')
-if (fs.existsSync(webDist)) {
+
+function dashboardBroken() {
+  try {
+    const html = fs.readFileSync(path.join(webDist, 'index.html'), 'utf8')
+    if (!html.trim()) return 'the page is empty'
+    const asset = html.match(/\/assets\/[^"']+\.js/)?.[0]
+    if (!asset) return 'the page references no application code'
+    const bundle = path.join(webDist, asset)
+    if (!fs.existsSync(bundle)) return 'the application code is missing'
+    if (fs.statSync(bundle).size < 10240) return 'the application code is truncated'
+    return null
+  } catch (err) {
+    return err.message
+  }
+}
+
+const broken = fs.existsSync(webDist) ? dashboardBroken() : 'it was never built'
+if (fs.existsSync(webDist) && !broken) {
   await app.register(fastifyStatic, { root: webDist })
+} else if (fs.existsSync(webDist)) {
+  console.error(`web/dist is damaged (${broken}) — serving the recovery page instead`)
+  // Deliberately one inline string with no assets: whatever went wrong took
+  // the built files with it, so this cannot depend on any of them.
+  const page = `<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ReefGauge</title><style>
+ html,body{margin:0;height:100%;background:#0d2b3e;color:#eaf2f7;
+   font:16px/1.55 -apple-system,system-ui,sans-serif;display:grid;place-items:center}
+ main{max-width:620px;padding:32px;text-align:center}
+ h1{font-size:30px;margin:0 0 14px}
+ p{opacity:.85;margin:0 0 12px}
+ code{background:rgba(255,255,255,.1);padding:2px 7px;border-radius:5px;font-size:15px}
+ .ok{margin-top:22px;padding:14px;border-radius:10px;background:rgba(80,200,140,.16)}
+</style></head><body><main>
+ <h1>This screen needs repairing</h1>
+ <p>The display software on this terminal is damaged — ${broken}.</p>
+ <div class="ok"><b>Your tank is still being watched.</b> Readings are still being
+  recorded and the alarms still sound. It is only this screen that is affected.</div>
+ <p style="margin-top:22px">To repair it, run on the terminal:</p>
+ <p><code>cd ~/reef-terminal/web &amp;&amp; npm run build</code></p>
+ <p>then restart the display. If you have support, this is worth a call.</p>
+</main></body></html>`
+  app.get('/', async (req, reply) => reply.type('text/html').send(page))
+  app.setNotFoundHandler(async (req, reply) => req.url.startsWith('/api/')
+    ? reply.code(404).send({ error: 'not found' })
+    : reply.type('text/html').send(page))
 } else {
   console.warn('web/dist not found — run `npm run build` in web/ (dev: use the Vite dev server).')
 }

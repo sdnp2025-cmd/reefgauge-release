@@ -124,7 +124,7 @@ async function storage(dataDir) {
 // sensor daemon are system units. A unit that is "activating (auto-restart)"
 // is not starting up, it is crash-looping - the distinction matters more than
 // any other single line in a support call.
-async function services() {
+async function services(repoRoot) {
   const out = []
   const system = [['reef-server.service', 'Terminal server'], ['co2-daemon.service', 'Room-air sensor daemon']]
   for (const [unit, label] of system) {
@@ -145,6 +145,40 @@ async function services() {
   } catch (err) {
     kiosk = err.stdout?.trim() || null
   }
+  // Whether the browser is running is not whether anything is on screen. A
+  // truncated build leaves the kiosk happily rendering an empty page: systemd
+  // reports the unit active, the customer sees white, and nothing anywhere
+  // says why. So check what it has to draw, not just that it is drawing.
+  try {
+    const dist = path.join(repoRoot, 'web', 'dist')
+    const indexPath = path.join(dist, 'index.html')
+    const html = fs.readFileSync(indexPath, 'utf8')
+    const asset = html.match(/\/assets\/[^"']+\.js/)?.[0]
+    const bundle = asset ? path.join(dist, asset) : null
+    const size = bundle && fs.existsSync(bundle) ? fs.statSync(bundle).size : 0
+
+    if (!html.trim()) {
+      out.push(check('dashboard', 'Dashboard files', 'fail', 'empty',
+        'index.html is zero bytes, so the screen shows nothing at all.',
+        'Rebuild it: cd ~/reef-terminal/web && npm run build, then restart the display.'))
+    } else if (!asset) {
+      out.push(check('dashboard', 'Dashboard files', 'fail', 'no script',
+        'The page loads but references no application code.',
+        'Rebuild it: cd ~/reef-terminal/web && npm run build, then restart the display.'))
+    } else if (size < 10240) {
+      out.push(check('dashboard', 'Dashboard files', 'fail', `${size} bytes`,
+        'The dashboard bundle is truncated - the screen will be blank or broken. '
+        + 'A build interrupted by a brownout leaves exactly this.',
+        'Rebuild it: cd ~/reef-terminal/web && npm run build, then restart the display.'))
+    } else {
+      out.push(check('dashboard', 'Dashboard files', 'ok', `${Math.round(size / 1024)} KB`))
+    }
+  } catch (err) {
+    out.push(check('dashboard', 'Dashboard files', 'fail', 'missing',
+      `The built dashboard is not there: ${err.message}`,
+      'Rebuild it: cd ~/reef-terminal/web && npm run build, then restart the display.'))
+  }
+
   out.push(check('svc:kiosk', 'On-screen display',
     kiosk === 'active' ? 'ok' : kiosk ? 'fail' : 'unknown',
     kiosk ?? 'unknown',
@@ -295,7 +329,7 @@ async function updates(repoRoot) {
 
 export async function collect({ config, state, db, dataDir, repoRoot }) {
   const [p, t, s, svc, net, upd] = await Promise.all([
-    power(), thermal(), storage(dataDir), services(), network(), updates(repoRoot)
+    power(), thermal(), storage(dataDir), services(repoRoot), network(), updates(repoRoot)
   ])
   const checks = [...p, ...t, ...svc, ...net, ...integrations(state, config, db), ...s, ...configuration(config, state), ...upd]
 
