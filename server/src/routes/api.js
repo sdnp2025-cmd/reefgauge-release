@@ -164,16 +164,29 @@ export default async function apiRoutes(app, { config, state, db }) {
     cabinet: state.env?.cabinet ?? null
   }))
 
+  const latestFor = (location) => state.env?.[location]
+    ?? db.prepare('SELECT ts, co2_ppm, temp_c, humidity_pct FROM env_readings WHERE location = ? ORDER BY ts DESC LIMIT 1').get(location)
+    ?? null
+
   app.get('/api/environment/latest', async () => {
-    const env = state.environment
+    // state.environment is still the display sensor and still the fallback for
+    // a unit whose rows all predate the location column.
+    const env = state.environment ?? latestFor('display')
       ?? db.prepare('SELECT ts, co2_ppm, temp_c, humidity_pct FROM env_readings ORDER BY ts DESC LIMIT 1').get()
       ?? null
-    let co2Status = 'unknown'
-    if (env?.co2_ppm != null) {
-      const { co2WarnPpm = 1000, co2HighPpm = 1500 } = config.environment ?? {}
-      co2Status = env.co2_ppm >= co2HighPpm ? 'high' : env.co2_ppm >= co2WarnPpm ? 'warn' : 'ok'
+    const { co2WarnPpm = 1000, co2HighPpm = 1500 } = config.environment ?? {}
+    const grade = (ppm) => ppm == null ? 'unknown'
+      : ppm >= co2HighPpm ? 'high' : ppm >= co2WarnPpm ? 'warn' : 'ok'
+
+    const cabinet = latestFor('cabinet')
+    return {
+      ...env,
+      co2Status: grade(env?.co2_ppm),
+      // The cabinet is only present once a puck has ever reported. A terminal
+      // without one should show no trace of it rather than an empty slot for
+      // something the customer has not bought.
+      cabinet: cabinet ? { ...cabinet, co2Status: grade(cabinet.co2_ppm) } : null
     }
-    return { ...env, co2Status }
   })
 
   app.get('/api/environment/history', async (req) => {

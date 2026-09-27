@@ -147,6 +147,24 @@ function AirCard({ onOpen }) {
       {stale
         ? <div className="air-stale">{never ? 'Sensor has never reported — check its wiring' : `Last read ${sinceText} — check the sensor`}</div>
         : <Spark points={series} status={status === 'crit' ? 'crit' : status} width={200} height={22} />}
+
+        {/* Only once a puck has ever reported. A terminal without one shows no
+            trace of this rather than an empty slot for something not bought. */}
+        {cabinet && (
+          <div className={`air-cabinet ${cabinetTrapped ? 'is-trapped' : ''} ${cabinetStale ? 'is-stale' : ''}`}>
+            <span className="air-cabinet-label">Cabinet</span>
+            {cabinetStale
+              ? <span className="air-cabinet-note">no reading {cabinetSinceText}</span>
+              : <>
+                  <b>{Math.round(cabinet.co2_ppm)}</b><span className="air-cabinet-unit">ppm</span>
+                  {cabinetTrapped && (
+                    <span className="air-cabinet-note">
+                      {cabinetGap} above the room &mdash; may be holding pH down
+                    </span>
+                  )}
+                </>}
+          </div>
+        )}
     </button>
   )
 }

@@ -15,3 +15,11 @@ firmware/dependencies.lock
 
 # Built app bundles and intermediate binaries.
 console/build/
+
+# Live per-unit provisioning keys. Never commit.
+#
+# provision.py drops a .gitignore next to this file, but that one lives inside
+# a directory the co2-puck branch tracks - so checking out a branch without it
+# deletes the .gitignore and leaves the keys exposed and unignored. A secrets
+# file protected by something branch-switching can remove is not protected.
+firmware/tools/provisioning/*.csv

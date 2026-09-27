@@ -29,6 +29,22 @@ export function useEnvironment(intervalMs = 30000) {
   const has = env?.co2_ppm != null || env?.temp_c != null
   const age = ts ? Date.now() - ts : null
   const stale = !has || age == null || age > ENV_STALE_MS
+  // The cabinet puck is a separate device on a separate network path, so it
+  // goes stale on its own schedule - the room sensor being fine says nothing
+  // about whether the puck is still reporting.
+  const cab = env?.cabinet ?? null
+  const cabAge = cab?.ts ? Date.now() - cab.ts : null
+  const cabStale = !cab || cabAge == null || cabAge > ENV_STALE_MS
+
+  // What the puck is actually for. A cabinet well above the room is a CO2 trap:
+  // the skimmer draws that air, it dissolves, and the tank's pH cannot rise
+  // past it. Below that gap the two readings are the same air and saying
+  // anything about the difference would be noise.
+  const GAP_PPM = 150
+  const gap = (!cabStale && !stale && cab?.co2_ppm != null && env?.co2_ppm != null)
+    ? Math.round(cab.co2_ppm - env.co2_ppm)
+    : null
+
   return {
     env,
     stale,
@@ -36,6 +52,12 @@ export function useEnvironment(intervalMs = 30000) {
     ageMs: age,
     sinceText: stale && age != null ? since(age) : null,
     // A stale reading may not claim a status - it is not "Good", it is unknown.
-    status: stale ? 'stale' : env?.co2Status === 'high' ? 'crit' : env?.co2Status === 'warn' ? 'warn' : 'ok'
+    status: stale ? 'stale' : env?.co2Status === 'high' ? 'crit' : env?.co2Status === 'warn' ? 'warn' : 'ok',
+
+    cabinet: cab,
+    cabinetStale: cabStale,
+    cabinetSinceText: cabStale && cabAge != null ? since(cabAge) : null,
+    cabinetTrapped: gap != null && gap >= GAP_PPM,
+    cabinetGap: gap
   }
 }

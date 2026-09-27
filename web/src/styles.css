@@ -3219,3 +3219,20 @@ body {
   color: inherit; opacity: .62; text-decoration: underline; cursor: pointer;
 }
 .hub-linkish:active { opacity: 1; }
+
+/* The cabinet reading, under the room's. Secondary by default because the room
+   is where the person is standing - and promoted the moment the cabinet runs
+   well above it, which is the one state worth interrupting for. */
+.air-cabinet {
+  display: flex; align-items: baseline; gap: 6px;
+  margin-top: 7px; padding-top: 7px;
+  border-top: 1px solid rgba(0,0,0,.08);
+  font-size: 15px; opacity: .78;
+}
+.air-cabinet-label { opacity: .7; }
+.air-cabinet b { font-size: 19px; font-weight: 600; }
+.air-cabinet-unit { font-size: 13px; opacity: .7; }
+.air-cabinet-note { font-size: 13px; opacity: .8; }
+.air-cabinet.is-trapped { opacity: 1; color: var(--bad, #c4541f); }
+.air-cabinet.is-trapped b { color: inherit; }
+.air-cabinet.is-stale { opacity: .55; font-style: italic; }
