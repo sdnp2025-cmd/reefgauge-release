@@ -119,7 +119,8 @@ export function useTankSeries(hours = 24, every = 5 * 60 * 1000) {
 // Room air, short: the CO2 number, what it means, temperature and humidity,
 // and the day as a line. Tap for the full air view.
 function AirCard({ onOpen }) {
-  const { env, stale, never, sinceText, status } = useEnvironment(30000)
+  const { env, stale, never, sinceText, status,
+          cabinet, cabinetStale, cabinetSinceText, cabinetTrapped, cabinetGap } = useEnvironment(30000)
   const [hist] = usePolling('/api/environment/history?hours=24', 5 * 60 * 1000)
   const series = useMemo(() => {
     const pts = (hist?.readings ?? []).filter((r) => r.co2_ppm != null).map((r) => ({ ts: r.ts, value: r.co2_ppm }))
