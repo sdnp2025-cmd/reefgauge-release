@@ -100,6 +100,21 @@ export function initDb(file) {
     );
     CREATE INDEX IF NOT EXISTS idx_coral_photos ON coral_photos(coral_id, ts);
   `)
+
+  // env_readings predates there being more than one air sensor. A puck in the
+  // cabinet and the sensor behind the screen measure different air - that
+  // difference is the entire reason the puck exists - so every reading has to
+  // say where it came from.
+  //
+  // Added by ALTER rather than in the CREATE above: the table already exists
+  // on every unit in the field, and CREATE TABLE IF NOT EXISTS silently does
+  // nothing to one that is already there. Existing rows are all from the
+  // terminal's own sensor, which is what the default says.
+  const envCols = db.prepare('PRAGMA table_info(env_readings)').all().map((c) => c.name)
+  if (!envCols.includes('location')) {
+    db.exec("ALTER TABLE env_readings ADD COLUMN location TEXT NOT NULL DEFAULT 'display'")
+    db.exec('CREATE INDEX IF NOT EXISTS idx_env_location_ts ON env_readings(location, ts)')
+  }
   seedMaintDefaults(db)
   return db
 }

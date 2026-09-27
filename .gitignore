@@ -10,6 +10,8 @@ __pycache__/
 # Ignored here too: switching branches otherwise leaves it as untracked noise
 # that stops scripts/release.sh, which refuses to cut a release from a dirty tree.
 firmware/build/
+firmware/managed_components/
+firmware/dependencies.lock
 
 # Built app bundles and intermediate binaries.
 console/build/

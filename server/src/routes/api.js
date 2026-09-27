@@ -128,17 +128,41 @@ export default async function apiRoutes(app, { config, state, db }) {
   }))
 
   // ---- Environment (CO2 sensor daemon posts here) ----
+  // Two things report here now: the sensor behind the screen, and a puck in
+  // the cabinet. They measure different air - the cabinet is what the skimmer
+  // draws and therefore what sets the tank's pH ceiling - so a reading that
+  // does not say where it came from is worth very little.
+  //
+  // 'display' is the default because that is what every existing caller is:
+  // the terminal's own co2_daemon.py has never sent a location and should not
+  // have to start.
+  const LOCATIONS = new Set(['display', 'cabinet'])
+
   app.post('/api/environment', async (req, reply) => {
-    const { co2_ppm, temp_c, humidity_pct } = req.body ?? {}
+    const { co2_ppm, temp_c, humidity_pct, source } = req.body ?? {}
     if (co2_ppm == null && temp_c == null && humidity_pct == null) {
       return reply.code(400).send({ error: 'empty reading' })
     }
+    const location = LOCATIONS.has(req.body?.location) ? req.body.location : 'display'
+
     const ts = Date.now()
-    db.prepare('INSERT INTO env_readings (ts, co2_ppm, temp_c, humidity_pct) VALUES (?, ?, ?, ?)')
-      .run(ts, co2_ppm ?? null, temp_c ?? null, humidity_pct ?? null)
-    state.environment = { ts, co2_ppm, temp_c, humidity_pct }
-    return { ok: true }
+    db.prepare('INSERT INTO env_readings (ts, co2_ppm, temp_c, humidity_pct, location) VALUES (?, ?, ?, ?, ?)')
+      .run(ts, co2_ppm ?? null, temp_c ?? null, humidity_pct ?? null, location)
+
+    const reading = { ts, co2_ppm, temp_c, humidity_pct, source: source ?? null }
+    state.env = { ...(state.env ?? {}), [location]: reading }
+    // state.environment stays the display sensor, unchanged. The alert engine,
+    // the diagnostics and the room-air card all read it, and quietly making it
+    // mean "whichever sensor reported last" would have the cabinet's air
+    // driving alarms written for the room.
+    if (location === 'display') state.environment = reading
+    return { ok: true, location }
   })
+
+  app.get('/api/environment', async () => ({
+    display: state.env?.display ?? state.environment ?? null,
+    cabinet: state.env?.cabinet ?? null
+  }))
 
   app.get('/api/environment/latest', async () => {
     const env = state.environment
