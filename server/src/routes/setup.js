@@ -501,6 +501,21 @@ async function connectWifi(ssid, password) {
       phoneAlerts: !!config.alerts?.ntfyTopic,
       slideshowIdle: [2, 5, 10, 30, 60, 0].includes(Number(config.slideshow?.idleMinutes)) ? Number(config.slideshow.idleMinutes) : 5,
       dosingMethod: DOSING_METHODS[methodFor(config)].name,
+      // Enough for the Settings list to say something true about calibration
+      // without a second request: how many air sensors are reporting, whether
+      // anyone has ever calibrated them, and how far apart they are. A pair in
+      // one room disagreeing is the symptom a customer actually sees.
+      air: (() => {
+        const temps = ['display', 'cabinet']
+          .map((loc) => (loc === 'display' ? state.environment : state.env?.[loc])?.temp_c)
+          .filter((t) => t != null)
+        const env = config.environment ?? {}
+        return {
+          sensors: temps.length,
+          calibrated: env.tempOffsetC != null || env.cabinetTempOffsetC != null,
+          spreadC: temps.length > 1 ? Math.round((Math.max(...temps) - Math.min(...temps)) * 100) / 100 : null
+        }
+      })(),
       photos
     }
   })

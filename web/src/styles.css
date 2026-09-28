@@ -3236,3 +3236,62 @@ body {
 .air-cabinet.is-trapped { opacity: 1; color: var(--bad, #c4541f); }
 .air-cabinet.is-trapped b { color: inherit; }
 .air-cabinet.is-stale { opacity: .55; font-style: italic; }
+
+/* ---- Calibration ---------------------------------------------------------
+   Sized like the rest of this panel: vh units, finger-sized targets, and
+   numbers large enough to read from standing in front of the tank rather than
+   leaning into the glass. */
+.calibration h2 {
+  font-size: 2.3vh; font-weight: 800; text-align: center;
+  margin-top: 1vh; color: var(--ink-2);
+}
+.cal-sensors { display: flex; gap: 1vw; }
+.cal-sensor {
+  flex: 1; padding: 1.4vh 1.2vw; border-radius: 1.2vh;
+  border: 0.2vh solid var(--line, rgba(130,150,180,.3));
+  display: flex; flex-direction: column; gap: 0.8vh;
+}
+/* A sensor reading below outdoor air is not a matter of degree - it is
+   impossible - so it is marked rather than left to be noticed. */
+.cal-sensor.suspect { border-color: var(--warn); }
+.cal-sensor-head { display: flex; flex-direction: column; gap: 0.2vh; }
+.cal-sensor-head b { font-size: 2vh; font-weight: 700; }
+.cal-sensor-head em { font-style: normal; font-size: 1.6vh; color: var(--muted); line-height: 1.35; }
+.cal-sensor-nums { display: flex; gap: 1.4vw; }
+.cal-sensor-nums div { display: flex; align-items: baseline; gap: 0.4vw; }
+.cal-sensor-nums span { font-size: 3vh; font-weight: 800; font-variant-numeric: tabular-nums; }
+.cal-sensor-nums em { font-style: normal; font-size: 1.6vh; color: var(--muted); }
+.cal-sensor-foot { font-size: 1.6vh; color: var(--muted); }
+
+.cal-flag {
+  font-size: 1.85vh; line-height: 1.45; text-align: center;
+  color: var(--warn); font-weight: 600;
+  padding: 1vh 1.2vw; border-radius: 1vh;
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+}
+.cal-said {
+  font-size: 1.85vh; line-height: 1.45; text-align: center;
+  color: var(--accent); font-weight: 600;
+}
+
+.cal-scope { display: flex; gap: 0.8vw; }
+.cal-scope button {
+  flex: 1; display: flex; flex-direction: column; gap: 0.3vh;
+  padding: 1.2vh 1vw; border-radius: 1.1vh; text-align: left;
+  border: 0.2vh solid var(--line, rgba(130,150,180,.3));
+  background: transparent; color: inherit; font: inherit;
+}
+.cal-scope button.on { border-color: var(--accent); }
+.cal-scope button b { font-size: 1.9vh; font-weight: 700; }
+.cal-scope button em { font-style: normal; font-size: 1.55vh; color: var(--muted); line-height: 1.35; }
+
+.cal-frc {
+  display: flex; flex-direction: column; gap: 0.8vh;
+  padding: 1.2vh 1.2vw; border-radius: 1.1vh;
+  border: 0.2vh solid var(--line, rgba(130,150,180,.3));
+}
+.cal-frc-head { display: flex; flex-direction: column; gap: 0.2vh; }
+.cal-frc-head b { font-size: 1.9vh; font-weight: 700; }
+.cal-frc-head em { font-style: normal; font-size: 1.6vh; color: var(--muted); }
+.cal-frc-actions { display: flex; gap: 0.8vw; }
+.cal-frc-actions .setup-primary { flex: 1; }

@@ -139,7 +139,7 @@ export default async function apiRoutes(app, { config, state, db }) {
   const LOCATIONS = new Set(['display', 'cabinet'])
 
   app.post('/api/environment', async (req, reply) => {
-    const { co2_ppm, temp_c, humidity_pct, source } = req.body ?? {}
+    const { co2_ppm, temp_c, humidity_pct, source, frcAck } = req.body ?? {}
     if (co2_ppm == null && temp_c == null && humidity_pct == null) {
       return reply.code(400).send({ error: 'empty reading' })
     }
@@ -156,7 +156,41 @@ export default async function apiRoutes(app, { config, state, db }) {
     // mean "whichever sensor reported last" would have the cabinet's air
     // driving alarms written for the room.
     if (location === 'display') state.environment = reading
-    return { ok: true, location }
+
+    // "I did the recalibration you asked for", riding along with the first
+    // reading taken afterwards. The puck cannot call /frc/ack itself - it POSTs
+    // and nothing more - and without this the request stays outstanding and is
+    // handed back on every subsequent reply, writing the sensor's EEPROM again
+    // and again.
+    if (frcAck?.id) {
+      const outstanding = pendingFrc[location]
+      if (outstanding && outstanding.id === frcAck.id) {
+        delete pendingFrc[location]
+        state.frcResult = {
+          ...(state.frcResult ?? {}),
+          [location]: {
+            at: Date.now(),
+            ok: frcAck.ok !== false,
+            referencePpm: outstanding.ppm,
+            correctionPpm: Number.isFinite(Number(frcAck.correctionPpm)) ? Number(frcAck.correctionPpm) : null,
+            error: frcAck.error ?? null
+          }
+        }
+        app.log.warn({ location, ok: frcAck.ok !== false, frcAck }, 'CO2 forced recalibration finished')
+      }
+    }
+
+    // A sensor with no inbound server can still be configured, as long as the
+    // answer to "here is my reading" carries what it should be doing. The puck
+    // has nothing listening on it by design; this is the whole channel.
+    return {
+      ok: true,
+      location,
+      config: {
+        tempOffsetC: currentOffset(location),
+        frc: frcRequestFor(location)
+      }
+    }
   })
 
   app.get('/api/environment', async () => ({
@@ -205,12 +239,50 @@ export default async function apiRoutes(app, { config, state, db }) {
   // minute without restarting anything. 4 C is the sensor's factory default.
   const DEFAULT_TEMP_OFFSET_C = 4
 
+  // The puck needs its own. It is the same chip, but self-heating is a property
+  // of the enclosure, not the sensor: the display's board sits in a sealed case
+  // beside a Pi and a backlight, the puck's in a cabinet with a return pump.
+  // One offset for both is how the same house came to read 31 C and 19 C.
+  const DEFAULT_CABINET_OFFSET_C = 6
+
+  const OFFSET_KEY = { display: 'tempOffsetC', cabinet: 'cabinetTempOffsetC' }
+  const OFFSET_DEFAULT = { display: DEFAULT_TEMP_OFFSET_C, cabinet: DEFAULT_CABINET_OFFSET_C }
+  const MAX_OFFSET_C = 20
+
+  function currentOffset(location) {
+    const value = config.environment?.[OFFSET_KEY[location]]
+    return Number.isFinite(value) ? value : OFFSET_DEFAULT[location]
+  }
+
+  // A forced recalibration in flight, per sensor: { ppm, id, requestedAt }.
+  //
+  // Deliberately not persisted. It is an instruction to a sensor sitting in air
+  // of a known concentration right now - if the terminal reboots before it is
+  // carried out, the moment has passed and firing it days later would calibrate
+  // against whatever air happened to be there.
+  const pendingFrc = {}
+
+  function frcRequestFor(location) {
+    const req = pendingFrc[location]
+    return req ? { ppm: req.ppm, id: req.id } : null
+  }
+
   app.get('/api/environment/config', async () => ({
-    tempOffsetC: config.environment?.tempOffsetC ?? DEFAULT_TEMP_OFFSET_C
+    // Unchanged for the display daemon, which has always read just this.
+    tempOffsetC: currentOffset('display'),
+    cabinetTempOffsetC: currentOffset('cabinet'),
+    frc: frcRequestFor('display')
   }))
 
   // Tell the terminal what the room actually is and it works out the rest:
   // new offset = current + (what the sensor says - what the room is).
+  //
+  // `location` is 'display', 'cabinet', or 'all' - and 'all' is not a
+  // convenience. Two sensors sitting in the same air are measuring one
+  // temperature, so one thermometer reading is the correct reference for both,
+  // and calibrating them separately from the same number is the same operation
+  // done twice. It is only wrong once the puck is in the cabinet, which is
+  // warmer than the room it is in.
   app.post('/api/environment/calibrate', async (req, reply) => {
     if (!isLocalRequest(req)) {
       return reply.code(403).send({ error: 'calibration is only available on the terminal itself' })
@@ -223,36 +295,170 @@ export default async function apiRoutes(app, { config, state, db }) {
       return reply.code(400).send({ error: 'give the room temperature as referenceC (0-45) or referenceF' })
     }
 
-    const measured = state.environment?.temp_c
-    if (measured == null) {
-      return reply.code(409).send({ error: 'no sensor reading yet - wait for the first one' })
+    const asked = req.body?.location ?? 'display'
+    const targets = asked === 'all'
+      ? ['display', 'cabinet']
+      : LOCATIONS.has(asked) ? [asked] : null
+    if (!targets) {
+      return reply.code(400).send({ error: "location must be 'display', 'cabinet' or 'all'" })
     }
 
-    const current = config.environment?.tempOffsetC ?? DEFAULT_TEMP_OFFSET_C
-    const next = Math.round((current + (measured - reference)) * 100) / 100
-    if (next < 0 || next > 20) {
-      return reply.code(400).send({
-        error: `that would need a ${next.toFixed(1)} C offset - check the temperature you gave`
+    // Work out every change and check every one of them before writing any.
+    // A half-applied calibration leaves two sensors disagreeing differently
+    // than they did before, which is harder to reason about than not having
+    // started.
+    const changes = []
+    const skipped = []
+    for (const location of targets) {
+      const measured = location === 'cabinet' ? state.env?.cabinet?.temp_c : state.environment?.temp_c
+      if (measured == null) {
+        skipped.push({ location, reason: 'it has not reported a reading yet' })
+        continue
+      }
+      const current = currentOffset(location)
+      const next = Math.round((current + (measured - reference)) * 100) / 100
+      if (next < 0 || next > MAX_OFFSET_C) {
+        // Naming the sensor matters here: with 'all', the number in the message
+        // is useless if you cannot tell which sensor produced it.
+        return reply.code(400).send({
+          error: `the ${location} sensor would need a ${next.toFixed(1)} C offset `
+            + `(it reads ${measured.toFixed(1)} C) - check the temperature you gave`
+        })
+      }
+      changes.push({ location, key: OFFSET_KEY[location], current, next, measured })
+    }
+
+    if (!changes.length) {
+      return reply.code(409).send({
+        error: targets.length > 1
+          ? 'neither sensor has reported a reading yet - wait for the first one'
+          : `the ${targets[0]} sensor has not reported a reading yet - wait for the first one`
       })
     }
 
-    config.environment = { ...config.environment, tempOffsetC: next }
+    const applied = Object.fromEntries(changes.map((c) => [c.key, c.next]))
+    config.environment = { ...config.environment, ...applied }
     // Keep it across reboots. A unit still on the example config has no
     // config.json to write into; the value stands until setup writes one.
     let persisted = false
     if (!config.isExample && fs.existsSync(config.configPath)) {
       const onDisk = JSON.parse(fs.readFileSync(config.configPath, 'utf8'))
-      onDisk.environment = { ...onDisk.environment, tempOffsetC: next }
+      onDisk.environment = { ...onDisk.environment, ...applied }
       saveConfigAtomic(config.configPath, onDisk)
       persisted = true
     }
+
     return {
       ok: true,
-      tempOffsetC: next,
-      previousOffsetC: current,
-      measuredC: measured,
       referenceC: Math.round(reference * 100) / 100,
-      persisted
+      persisted,
+      // Flat fields for the original single-sensor callers, which only ever
+      // calibrated the display and only ever read tempOffsetC.
+      ...(changes[0].location === 'display'
+        ? { tempOffsetC: changes[0].next, previousOffsetC: changes[0].current, measuredC: changes[0].measured }
+        : {}),
+      sensors: changes.map(({ location, current, next, measured }) => ({
+        location, offsetC: next, previousOffsetC: current, measuredC: measured
+      })),
+      skipped
+    }
+  })
+
+  // ---- CO2 forced recalibration ----
+  //
+  // The puck runs with automatic self-calibration off, and that is correct: ASC
+  // works by assuming the sensor sees genuine fresh air every so often, which is
+  // true of an office that empties overnight and false of a sealed cabinet with
+  // a skimmer drawing from it. The consequence is that forced recalibration is
+  // the *only* thing that corrects its CO2, so it has to be a feature rather
+  // than a service procedure - a sensor with no correction path drifts until it
+  // reads below outdoor air, which is how this one got to 330 ppm indoors.
+  //
+  // This does not calibrate anything by itself. It records that a sensor should
+  // recalibrate against a known concentration; the sensor carries it out and
+  // says so. The daemon collects it from /api/environment/config, the puck from
+  // the reply to its own reading, because nothing listens on the puck.
+  const FRESH_AIR_PPM = 425
+
+  app.post('/api/environment/frc', async (req, reply) => {
+    if (!isLocalRequest(req)) {
+      return reply.code(403).send({ error: 'calibration is only available on the terminal itself' })
+    }
+    const location = LOCATIONS.has(req.body?.location) ? req.body.location : 'display'
+    const ppm = req.body?.ppm == null ? FRESH_AIR_PPM : Number(req.body.ppm)
+    // Below ~350 is below anything on Earth outdoors, and a mistyped reference
+    // is written into the sensor's own EEPROM - it outlives the mistake.
+    if (!Number.isFinite(ppm) || ppm < 350 || ppm > 2000) {
+      return reply.code(400).send({ error: 'ppm must be between 350 and 2000 (outdoor air is about 425)' })
+    }
+    const latest = location === 'cabinet' ? state.env?.cabinet : state.environment
+    if (!latest) {
+      return reply.code(409).send({ error: `the ${location} sensor has not reported a reading yet` })
+    }
+
+    pendingFrc[location] = { ppm, id: `${Date.now().toString(36)}`, requestedAt: Date.now() }
+    app.log.warn({ location, ppm }, 'CO2 forced recalibration requested')
+    return { ok: true, location, ppm, id: pendingFrc[location].id, measuredPpm: latest.co2_ppm ?? null }
+  })
+
+  // How it went, from whichever sensor carried it out. Acknowledging by id is
+  // what keeps a request from being performed twice: neither collector clears
+  // it on read, so a sensor that dies mid-recalibration has not silently
+  // consumed the instruction.
+  app.post('/api/environment/frc/ack', async (req, reply) => {
+    const location = LOCATIONS.has(req.body?.location) ? req.body.location : 'display'
+    const { id, ok, correctionPpm, error } = req.body ?? {}
+    const outstanding = pendingFrc[location]
+    if (!outstanding || outstanding.id !== id) {
+      return reply.code(409).send({ error: 'no recalibration is outstanding with that id' })
+    }
+    delete pendingFrc[location]
+    state.frcResult = {
+      ...(state.frcResult ?? {}),
+      [location]: {
+        at: Date.now(),
+        ok: ok !== false,
+        referencePpm: outstanding.ppm,
+        correctionPpm: Number.isFinite(Number(correctionPpm)) ? Number(correctionPpm) : null,
+        error: error ?? null
+      }
+    }
+    app.log.warn({ location, ok: ok !== false, correctionPpm, error }, 'CO2 forced recalibration finished')
+    return { ok: true }
+  })
+
+  // What the calibration screen needs in one call: where each sensor is, what
+  // it reads, what offset it is carrying, and whether it reads below outdoor
+  // air - which is not a judgement call, it is impossible indoors.
+  app.get('/api/environment/calibration', async () => {
+    const describe = (location) => {
+      const latest = location === 'cabinet' ? latestFor('cabinet') : (state.environment ?? latestFor('display'))
+      return {
+        location,
+        present: latest != null,
+        ts: latest?.ts ?? null,
+        tempC: latest?.temp_c ?? null,
+        co2Ppm: latest?.co2_ppm ?? null,
+        humidityPct: latest?.humidity_pct ?? null,
+        offsetC: currentOffset(location),
+        defaultOffsetC: OFFSET_DEFAULT[location],
+        belowFreshAir: latest?.co2_ppm != null && latest.co2_ppm < FRESH_AIR_PPM,
+        pendingFrc: frcRequestFor(location),
+        lastFrc: state.frcResult?.[location] ?? null
+      }
+    }
+    const sensors = [describe('display'), describe('cabinet')].filter((s) => s.present)
+    const temps = sensors.map((s) => s.tempC).filter((t) => t != null)
+    const co2s = sensors.map((s) => s.co2Ppm).filter((c) => c != null)
+    return {
+      freshAirPpm: FRESH_AIR_PPM,
+      maxOffsetC: MAX_OFFSET_C,
+      sensors,
+      // Two sensors in one room are measuring one temperature and one air. How
+      // far apart they are is the whole story, so the screen should not have to
+      // work it out from the cards.
+      tempSpreadC: temps.length > 1 ? Math.round((Math.max(...temps) - Math.min(...temps)) * 100) / 100 : null,
+      co2SpreadPpm: co2s.length > 1 ? Math.max(...co2s) - Math.min(...co2s) : null
     }
   })
 

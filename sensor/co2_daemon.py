@@ -36,19 +36,77 @@ FALLBACK_TEMP_OFFSET_C = float(os.environ.get("TEMP_OFFSET_C", DEFAULT_TEMP_OFFS
 MAX_TEMP_OFFSET_C = 20.0
 
 
-def configured_offset(previous):
-    """The offset the server wants, or `previous` when it can't be asked."""
+# A forced recalibration only works if the sensor has been measuring in stable
+# air for more than three minutes (datasheet 3.8.1); asked sooner, the chip
+# returns 0xffff and the attempt is simply wasted. So a request that arrives too
+# early is left outstanding rather than failed - it will be picked up again on
+# the next pass, by which time it can actually succeed.
+FRC_MIN_MEASURING_SECONDS = 200
+MEASURING_SINCE = None
+
+
+def server_config(previous):
+    """What the server wants: {"offset": float, "frc": dict|None}.
+
+    Keeps `previous` as the offset when the server can't be asked - a daemon
+    that reverted to the factory default every time a restart raced it would
+    make the room jump 4 C for no reason anyone could see.
+    """
     try:
         res = requests.get(f"{SERVER_URL}/api/environment/config", timeout=5)
         res.raise_for_status()
-        value = float(res.json().get("tempOffsetC", DEFAULT_TEMP_OFFSET_C))
+        body = res.json()
+        value = float(body.get("tempOffsetC", DEFAULT_TEMP_OFFSET_C))
     except (requests.RequestException, TypeError, ValueError) as err:
         print(f"could not read the temperature offset ({err}) — keeping {previous:.2f} C")
-        return previous
+        return {"offset": previous, "frc": None}
     if not 0.0 <= value <= MAX_TEMP_OFFSET_C:
         print(f"ignoring out-of-range temperature offset {value} C")
-        return previous
-    return value
+        value = previous
+    frc = body.get("frc")
+    if not (isinstance(frc, dict) and frc.get("id") and frc.get("ppm") is not None):
+        frc = None
+    return {"offset": value, "frc": frc}
+
+
+def acknowledge_frc(ack):
+    """Tell the server how the recalibration went, and insist a little.
+
+    The server clears the request only on this acknowledgement, deliberately: a
+    sensor that dies mid-recalibration has not silently swallowed the
+    instruction. The flip side is that losing this message means being asked
+    again, and forced recalibration writes the sensor's EEPROM - so it is worth
+    more than one attempt.
+    """
+    for attempt in range(3):
+        try:
+            requests.post(f"{SERVER_URL}/api/environment/frc/ack", json=ack, timeout=10)
+            return
+        except requests.RequestException as err:
+            print(f"could not acknowledge the recalibration ({err})")
+            time.sleep(2 * (attempt + 1))
+    print("giving up acknowledging - the terminal may ask for it again")
+
+
+def run_frc(scd, request):
+    """Recalibrate CO2 against a known concentration the terminal supplied."""
+    ppm = int(float(request["ppm"]))
+    ack = {"location": "display", "id": request["id"]}
+    try:
+        correction = scd.force_calibration(ppm)
+        ack["ok"] = True
+        ack["correctionPpm"] = correction
+        print(f"recalibrated to {ppm} ppm — the sensor was out by {correction:+d} ppm")
+    except Exception as err:  # noqa: BLE001 - an I2C fault must not kill the daemon
+        ack["ok"] = False
+        ack["error"] = str(err)
+        print(f"recalibration to {ppm} ppm failed: {err}")
+    finally:
+        # force_calibration stops periodic measurement as a side-effect and does
+        # not restart it, whether it succeeded or not. Without this the daemon
+        # stays alive, logs nothing wrong, and never posts another reading.
+        start_measuring(scd)
+    acknowledge_frc(ack)
 
 
 def start_measuring(scd):
@@ -58,7 +116,9 @@ def start_measuring(scd):
     powered its heater. Publishing it is enough to spike the graph and trip the
     high-CO2 alert, which is exactly what a service restart used to do.
     """
+    global MEASURING_SINCE
     scd.start_periodic_measurement()
+    MEASURING_SINCE = time.monotonic()
     deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
         if scd.data_ready:
@@ -83,9 +143,19 @@ def main():
 
     # Kept in RAM, not persisted to the sensor's EEPROM: it is re-applied on
     # every start, and EEPROM writes are a finite resource.
-    applied_offset = configured_offset(FALLBACK_TEMP_OFFSET_C)
+    applied_offset = server_config(FALLBACK_TEMP_OFFSET_C)["offset"]
     scd.temperature_offset = applied_offset
     print(f"temperature offset set to {applied_offset:.2f} C")
+
+    # Worth one line in the log. This sensor leaves automatic self-calibration
+    # on, which is right for a room that sees fresh air when the house is
+    # empty - and is exactly what the cabinet puck must not do. Which of the two
+    # a sensor is doing decides whether its CO2 can be trusted as a reference
+    # for the other, so it should not be a matter of reading the source.
+    try:
+        print(f"automatic self-calibration is {'on' if scd.self_calibration_enabled else 'off'}")
+    except Exception as err:  # noqa: BLE001
+        print(f"could not read the self-calibration setting: {err}")
 
     print("SCD41 started, waiting for first measurement...")
     start_measuring(scd)
@@ -105,10 +175,20 @@ def main():
 
             # Picking a new offset up here means calibrating from the terminal
             # takes effect within a minute, without anyone restarting a service.
-            wanted = configured_offset(applied_offset)
-            if abs(wanted - applied_offset) >= 0.01:
-                apply_offset(scd, wanted)
-                applied_offset = wanted
+            wanted = server_config(applied_offset)
+            if abs(wanted["offset"] - applied_offset) >= 0.01:
+                apply_offset(scd, wanted["offset"])
+                applied_offset = wanted["offset"]
+
+            if wanted["frc"]:
+                measuring_for = time.monotonic() - (MEASURING_SINCE or time.monotonic())
+                if measuring_for < FRC_MIN_MEASURING_SECONDS:
+                    print(
+                        f"recalibration requested, but the sensor has only been measuring for "
+                        f"{measuring_for:.0f}s — waiting for {FRC_MIN_MEASURING_SECONDS}s"
+                    )
+                else:
+                    run_frc(scd, wanted["frc"])
 
             time.sleep(INTERVAL_SECONDS)
         else:
