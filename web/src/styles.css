@@ -3317,6 +3317,9 @@ body {
    probe. Quiet on purpose: it is provenance, not a warning, and it must never
    compete with the LOW/HIGH flag beside it. */
 .gauge-src {
+  /* The label row is uppercased; a maker's name is not ours to restyle, and
+     "AQUAWIZ" is not how they write it. */
+  text-transform: none;
   font-size: 1.35vh; font-weight: 700; letter-spacing: 0.04em;
   padding: 0.2vh 0.5vw; border-radius: 0.5vh;
   color: var(--muted); border: 0.15vh solid var(--line, rgba(130,150,180,.35));
