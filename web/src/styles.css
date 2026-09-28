@@ -3312,3 +3312,13 @@ body {
   font-size: 2.3vh; font-weight: 800; text-align: center;
   margin-top: 1vh; color: var(--ink-2);
 }
+
+/* A reading that came from another maker's instrument, not the Apex's own
+   probe. Quiet on purpose: it is provenance, not a warning, and it must never
+   compete with the LOW/HIGH flag beside it. */
+.gauge-src {
+  font-size: 1.35vh; font-weight: 700; letter-spacing: 0.04em;
+  padding: 0.2vh 0.5vw; border-radius: 0.5vh;
+  color: var(--muted); border: 0.15vh solid var(--line, rgba(130,150,180,.35));
+  white-space: nowrap;
+}

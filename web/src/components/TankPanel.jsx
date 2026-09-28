@@ -15,6 +15,16 @@ export function formatValue(key, value) {
 
 const FLAGS = { low: '▼ LOW', high: '▲ HIGH' }
 
+// Readings that did not come from the Apex's own probe.
+//
+// A KH monitor sends alkalinity down a BNC as a pH signal, so the Apex reports
+// it like any other pH input and the terminal would otherwise present it as
+// something the Apex measured. It is worth naming: the customer bought that box
+// separately, it tests on its own schedule rather than the Apex's, and when
+// they ring up about a number being wrong, which device produced it is the
+// first thing anyone needs to know.
+export const SOURCE_LABEL = { aquawiz: 'AquaWiz', ekoral: 'Ekoral' }
+
 // Speedometer: 180° arc, continuous red→amber→green→amber→red gradient so the
 // green apex is the target band and both extremes run hot. The displayed span
 // is the target range padded by one range-width per side (thirds).
@@ -81,6 +91,7 @@ function Gauge({ paramKey, p, onOpen }) {
     <div className={`gauge status-${status}`} onClick={onOpen} role="button" aria-label={`${p?.label ?? paramKey} trend`}>
       <div className="gauge-label">
         <span>{p?.label ?? paramKey}</span>
+        {SOURCE_LABEL[p?.source] && <span className="gauge-src">{SOURCE_LABEL[p.source]}</span>}
         {FLAGS[status] && <span className="gauge-flag">{FLAGS[status]}</span>}
       </div>
       <svg viewBox="0 0 100 78">

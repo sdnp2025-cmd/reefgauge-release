@@ -92,7 +92,13 @@ export default async function apiRoutes(app, { config, state, db }) {
   // ---- Tank ----
   app.get('/api/tank/latest', async () => {
     const params = {}
-    for (const key of Object.keys(config.apex.inputs)) {
+    for (const [key, inputName] of Object.entries(config.apex.inputs)) {
+      // A null mapping is someone having said "nothing measures this" on the
+      // probe screen. Keys were once only ever present when mapped, so a
+      // truthiness check was not needed here; now it is, and without it saying
+      // "nothing measures this" produced a permanently empty gauge instead of
+      // removing it - exactly the opposite of what was asked for.
+      if (!inputName) continue
       const value = state.tank.latest[key]
       const range = config.ranges?.[key]
       let status = 'unknown'
@@ -103,6 +109,12 @@ export default async function apiRoutes(app, { config, state, db }) {
         value: value ?? null,
         status,
         range: range ?? null,
+        // Where the number came from, when it is not the Apex's own probe. A
+        // KH monitor's reading arrives down a pH input, and the screen should
+        // say so rather than implying the Apex measured it - the customer
+        // bought the other box, and when they ring up about a reading it
+        // matters which device is being talked about.
+        source: config.apex?.inputSources?.[key] ?? null,
         ...PARAM_META[key]
       }
     }
