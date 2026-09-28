@@ -50,6 +50,8 @@ const ALLOW = [
   ['POST', /^\/api\/alerts\/sounds$/],          // tones, quiet hours
   ['POST', /^\/api\/slideshow\/config$/],       // screensaver and its timer
   ['POST', /^\/api\/environment\/calibrate$/],  // room-air temperature offset
+  ['GET', /^\/api\/apex\/inputs$/],  // which Apex input is feeding which gauge
+  ['POST', /^\/api\/apex\/inputs$/],  // ...and fixing one that is wrong
   ['GET', /^\/api\/environment\/calibration$/],  // what each air sensor reads and is correcting by
   ['POST', /^\/api\/environment\/frc$/],  // ask a sensor to recalibrate CO2 against known air
   ['GET',  /^\/api\/ranges$/],
@@ -71,7 +73,7 @@ const ALLOW = [
 
 // Writes get recorded. The customer is told what was changed, and "it stopped
 // working after support touched it" becomes a question with an answer.
-const WRITES = /^\/api\/(setup\/complete|alerts\/sounds|slideshow\/config|environment\/(calibrate|frc)|ranges)$/
+const WRITES = /^\/api\/(setup\/complete|alerts\/sounds|slideshow\/config|environment\/(calibrate|frc)|apex\/inputs|ranges)$/
 const AUDIT_MAX = 100
 
 const allowed = (method, path) => ALLOW.some(([m, re]) => m === method && re.test(path))

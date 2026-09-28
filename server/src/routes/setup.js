@@ -501,6 +501,20 @@ async function connectWifi(ssid, password) {
       phoneAlerts: !!config.alerts?.ntfyTopic,
       slideshowIdle: [2, 5, 10, 30, 60, 0].includes(Number(config.slideshow?.idleMinutes)) ? Number(config.slideshow.idleMinutes) : 5,
       dosingMethod: DOSING_METHODS[methodFor(config)].name,
+      // How many gauges actually have a probe behind them. A blank card is the
+      // only sign of an unassigned parameter anywhere else, and a blank card
+      // reads as "the tank is fine" rather than "nothing is watching this".
+      probes: (() => {
+        const mapping = config.apex?.inputs ?? {}
+        const params = ['temp', 'ph', 'salinity', 'alk', 'ca', 'mg', 'no3', 'po4']
+        const sources = config.apex?.inputSources ?? {}
+        const LABEL = { aquawiz: 'AquaWiz', ekoral: 'Ekoral' }
+        return {
+          total: params.length,
+          mapped: params.filter((p) => mapping[p]).length,
+          viaKhMonitor: LABEL[sources.alk] ?? null
+        }
+      })(),
       // Enough for the Settings list to say something true about calibration
       // without a second request: how many air sensors are reporting, whether
       // anyone has ever calibrated them, and how far apart they are. A pair in

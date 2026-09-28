@@ -103,7 +103,11 @@ function adoptReturningInputs(config, inputs) {
   const mapped = new Set(Object.values(config.apex.inputs ?? {}))
   let changed = false
   for (const [param, type] of Object.entries(ADOPTABLE_TYPES)) {
-    if (config.apex.inputs[param]) continue
+    // `param in inputs` rather than a truthiness check: the mapping screen
+    // writes an explicit null to mean "there is no probe for this", and a
+    // falsy test treated that as an empty slot and adopted something into it
+    // on the next poll - overruling the person who had just said otherwise.
+    if (Object.prototype.hasOwnProperty.call(config.apex.inputs, param)) continue
     const input = inputs.find((i) => !mapped.has(i.name) && String(i.type).toLowerCase() === type)
     if (!input) continue
     config.apex.inputs[param] = input.name

@@ -9,6 +9,7 @@ import ScreensaverSettings from './ScreensaverSettings.jsx'
 import BackupPanel from './BackupPanel.jsx'
 import PhoneAlerts from './PhoneAlerts.jsx'
 import Calibration from './Calibration.jsx'
+import ApexInputs from './ApexInputs.jsx'
 import SupportPanel from './SupportPanel.jsx'
 import DosingSettings from './DosingSettings.jsx'
 import OnScreenKeyboard from './OnScreenKeyboard.jsx'
@@ -39,6 +40,7 @@ const Ico = {
   lifebuoy: <svg {...S}><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="3.6" /><path d="m5.6 5.6 3.9 3.9" /><path d="m14.5 14.5 3.9 3.9" /><path d="m18.4 5.6-3.9 3.9" /><path d="m9.5 14.5-3.9 3.9" /></svg>,
   archive: <svg {...S}><path d="M3 7h18v13H3z" /><path d="M3 7l2-3h14l2 3" /><path d="M10 12h4" /></svg>,
   phone: <svg {...S}><rect x="7" y="2.5" width="10" height="19" rx="2.2" /><path d="M11 18.6h2" /></svg>,
+  probe: <svg {...S}><path d="M8 3h8" /><path d="M10 3v10.2a4 4 0 1 0 4 0V3" /><path d="M12 16.6h.01" /></svg>,
   thermometer: (
     <svg {...S}>
       <path d="M14 14.2V5a2 2 0 1 0-4 0v9.2a4 4 0 1 0 4 0Z" />
@@ -83,6 +85,21 @@ const SECTIONS = [
   { id: 'location', step: 2, icon: 'pin', title: 'Location', line: (s) => s.location ?? 'Not set — weather is guessing', bad: (s) => !s.location },
   { id: 'name', step: 3, icon: 'tag', title: 'Tank name', line: (s) => s.tankName ?? 'Not named yet — tap to name it', bad: (s) => !s.tankName },
   { id: 'apex', step: 4, icon: 'flask', title: 'Apex controller', line: (s) => s.apex ?? 'No controller set', bad: (s) => !s.apex },
+  {
+    id: 'probes',
+    icon: 'probe',
+    title: 'Tank probes',
+    // The count is the useful line: "4 of 8" tells someone at a glance that
+    // half their gauges have nothing behind them, which is otherwise only
+    // discoverable by noticing a blank card.
+    line: (s) => {
+      if (!s.apex) return 'Needs an Apex controller'
+      const m = s.probes ?? {}
+      if (!m.total) return 'Tap to check which probe is which'
+      return `${m.mapped} of ${m.total} assigned`
+        + (m.viaKhMonitor ? ` · alkalinity via ${m.viaKhMonitor}` : '')
+    }
+  },
   { id: 'dosing', icon: 'drop', title: 'Dosing', line: (s) => s.dosingMethod ?? 'Two-part' },
   {
     id: 'equipment',
@@ -336,6 +353,7 @@ export default function SettingsHub({ onExit }) {
   if (open === 'backup') return panel('Backup', <BackupPanel />, 'Done')
   if (open === 'phone') return panel('Phone alerts', <PhoneAlerts />, 'Done')
   if (open === 'calibration') return panel('Air sensors', <Calibration />, 'Done')
+  if (open === 'probes') return panel('Tank probes', <ApexInputs />, 'Done')
   if (open === 'support') return panel('Support', <SupportPanel />, 'Done')
   if (open === 'reset') {
     return (

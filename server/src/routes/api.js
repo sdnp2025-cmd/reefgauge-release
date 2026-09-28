@@ -127,6 +127,83 @@ export default async function apiRoutes(app, { config, state, db }) {
     error: state.tank.error
   }))
 
+  // ---- Which Apex input is which reading ----
+  //
+  // Setup maps these automatically, by the Apex's own input type first and a
+  // name pattern second, and for a Trident that is right every time. It is not
+  // right for everything else plugged into an Apex, and when it is wrong it is
+  // wrong silently: the value is a plausible number in a plausible place.
+  //
+  // The case that forced this is a KH monitor - AquaWiz, Ekoral - whose BNC
+  // output is a pH-electrode signal carrying the alkalinity figure. The Apex
+  // reports it with type "pH", so unless the customer happened to name it
+  // something beginning with "alk", it is adopted as the tank's pH and the wall
+  // shows 8.2 pH that is really 8.2 dKH. Nothing about that looks wrong.
+  //
+  // So: let someone say what a thing actually is.
+  const MAPPABLE = ['temp', 'ph', 'salinity', 'alk', 'ca', 'mg', 'no3', 'po4']
+
+  // A KH monitor on a pH input is not a quirk to be tolerated - it is a
+  // supported way to wire one up, and worth recording as such. It changes
+  // nothing about how the value is read; it means the terminal can say where
+  // the number came from instead of implying the Apex measured it.
+  const SIGNAL_SOURCES = ['apex', 'aquawiz', 'ekoral']
+
+  app.get('/api/apex/inputs', async () => ({
+    configured: !!config.apex?.host,
+    inputs: state.tank?.inputs ?? [],
+    mapping: config.apex?.inputs ?? {},
+    sources: config.apex?.inputSources ?? {},
+    params: MAPPABLE,
+    updatedAt: state.tank?.updatedAt ?? null,
+    error: state.tank?.error ?? null
+  }))
+
+  app.post('/api/apex/inputs', async (req, reply) => {
+    if (!isLocalRequest(req)) {
+      return reply.code(403).send({ error: 'probe mapping is only available on the terminal itself' })
+    }
+    const { param, inputName, source } = req.body ?? {}
+    if (!MAPPABLE.includes(param)) {
+      return reply.code(400).send({ error: `param must be one of ${MAPPABLE.join(', ')}` })
+    }
+    if (source != null && !SIGNAL_SOURCES.includes(source)) {
+      return reply.code(400).send({ error: `source must be one of ${SIGNAL_SOURCES.join(', ')}` })
+    }
+
+    // null clears it. Stored as an explicit null rather than deleted, because
+    // "there is no probe for this" and "nobody has said yet" are different
+    // things - and the poller's auto-adopt is allowed to fill only the second.
+    let next = null
+    if (inputName != null) {
+      const known = (state.tank?.inputs ?? []).some((i) => i.name === inputName)
+      if (!known) {
+        return reply.code(400).send({ error: `the Apex is not reporting an input called "${inputName}"` })
+      }
+      next = inputName
+    }
+
+    const mapping = { ...(config.apex?.inputs ?? {}), [param]: next }
+    const sources = { ...(config.apex?.inputSources ?? {}) }
+    if (next == null || source == null || source === 'apex') delete sources[param]
+    else sources[param] = source
+
+    config.apex = { ...config.apex, inputs: mapping, inputSources: sources }
+
+    let persisted = false
+    if (!config.isExample && fs.existsSync(config.configPath)) {
+      const onDisk = JSON.parse(fs.readFileSync(config.configPath, 'utf8'))
+      onDisk.apex = { ...onDisk.apex, inputs: mapping, inputSources: sources }
+      saveConfigAtomic(config.configPath, onDisk)
+      persisted = true
+    }
+
+    app.log.warn({ param, inputName: next, source: sources[param] ?? 'apex' }, 'probe mapping changed')
+    // No restart: the poller re-reads config.apex every cycle, so this lands on
+    // the next one - within a minute, by default.
+    return { ok: true, param, inputName: next, source: sources[param] ?? null, mapping, sources, persisted }
+  })
+
   // ---- Environment (CO2 sensor daemon posts here) ----
   // Two things report here now: the sensor behind the screen, and a puck in
   // the cabinet. They measure different air - the cabinet is what the skimmer
