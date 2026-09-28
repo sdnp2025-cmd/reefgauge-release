@@ -3,6 +3,7 @@
 // /cgi-bin/status.json with basic auth for older firmware.
 
 import fs from 'node:fs'
+import { onClockStep, shift } from '../clock.js'
 
 let sessionCookie = null
 
@@ -134,6 +135,11 @@ async function pollOnce(config, state, db) {
 
   const insert = db.prepare('INSERT INTO tank_readings (ts, param, value) VALUES (?, ?, ?)')
   const now = Date.now()
+  // Remember what we stamped rows with, so a later clock correction can find
+  // exactly those rows again. Only ours: a boot clock is the time of the last
+  // shutdown, so "rows dated around then" would also match genuine readings
+  // from that evening, and shifting those would corrupt real history.
+  stampedSinceStep.add(now)
   const latest = {}
 
   // One transaction: a partial write used to be able to leave a half-recorded
@@ -159,6 +165,10 @@ async function pollOnce(config, state, db) {
   state.tank.error = null
 }
 
+// Wall-clock instants this process has written to tank_readings since the last
+// clock correction.
+const stampedSinceStep = new Set()
+
 export function startApexPoller(config, state, db) {
   const intervalMs = (config.apex.pollSeconds ?? 60) * 1000
   const run = async () => {
@@ -171,4 +181,36 @@ export function startApexPoller(config, state, db) {
   }
   run()
   setInterval(run, intervalMs)
+
+  // The clock just moved, so the reading we are holding is now wrongly dated
+  // and everything downstream believes it is ancient. Go and get a real one
+  // rather than waiting out the poll interval with the alarm sounding.
+  onClockStep((delta) => {
+    // Shift rather than clear. The reading we are holding was taken seconds
+    // ago and still was - only the numbering of the clock changed. Clearing it
+    // would read as "no data", which downstream treats as offline, which is
+    // the alarm this exists to prevent.
+    state.tank.updatedAt = shift(state.tank.updatedAt, delta)
+    state.tank.feedUntil = shift(state.tank.feedUntil, delta)
+
+    // Rows written before the correction carry the wrong date. Left alone they
+    // are not lost, they are worse: a reading taken at boot appears on the
+    // trend twenty hours back, with a plausible value, and the chart quietly
+    // tells a story that did not happen.
+    if (stampedSinceStep.size) {
+      const stamps = [...stampedSinceStep]
+      stampedSinceStep.clear()
+      try {
+        const fix = db.prepare('UPDATE tank_readings SET ts = ts + ? WHERE ts = ?')
+        const fixAll = db.transaction((list) => { for (const ts of list) fix.run(delta, ts) })
+        fixAll(stamps)
+        console.warn(`re-dated ${stamps.length} reading(s) written before the clock was set`)
+      } catch (err) {
+        console.warn('could not re-date readings after the clock changed:', err.message)
+      }
+    }
+    // Then go and get a genuinely current one, rather than waiting out the
+    // poll interval on a terminal that has just booted.
+    run()
+  })
 }

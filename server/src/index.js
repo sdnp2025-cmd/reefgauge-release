@@ -5,6 +5,7 @@ import fastifyStatic from '@fastify/static'
 import fastifyCors from '@fastify/cors'
 import fastifyMultipart from '@fastify/multipart'
 import { loadConfig } from './config.js'
+import { startClockWatch, onClockStep, shift } from './clock.js'
 import { initDb, pruneOldReadings } from './db.js'
 import { startApexPoller } from './pollers/apex.js'
 import { startWeatherPoller } from './pollers/weather.js'
@@ -24,12 +25,32 @@ import { authorize as authorizePhone } from './phoneSession.js'
 const config = loadConfig()
 const db = initDb(config.db)
 
+// Watch for the clock being stepped before anything starts recording times
+// against it. See clock.js: this machine has no real-time clock, so it boots
+// believing it is whenever it last was and is corrected by NTP seconds later.
+startClockWatch(console)
+
 const state = {
   tank: { latest: {}, inputs: [], updatedAt: null, error: null },
   environment: null,
   weather: null,
   ring: { camera: null, lastDing: null, snapshotAt: null, error: null },
 }
+
+// Everything else in `state` that is a wall-clock instant. Each of these is
+// read as "how long ago", so each has to move with the clock or it starts
+// lying by the size of the step - which for the environment timestamps means a
+// CO2 sensor that reported thirty seconds ago being declared offline.
+onClockStep((delta) => {
+  if (state.environment) state.environment.ts = shift(state.environment.ts, delta)
+  for (const reading of Object.values(state.env ?? {})) {
+    if (reading) reading.ts = shift(reading.ts, delta)
+  }
+  if (state.ring) {
+    state.ring.lastDing = shift(state.ring.lastDing, delta)
+    state.ring.snapshotAt = shift(state.ring.snapshotAt, delta)
+  }
+})
 
 const app = Fastify({ logger: { level: 'warn' }, trustProxy: false })
 await app.register(fastifyCors, { origin: true })

@@ -8,6 +8,7 @@ import path from 'node:path'
 
 import { PARAM_META } from './config.js'
 import { playAlarm, alarmConfig } from './alarmSound.js'
+import { uptimeMs } from './clock.js'
 
 const CHECK_SECONDS = 60
 const APEX_STALE_MS = 10 * 60 * 1000
@@ -226,7 +227,12 @@ export function startAlerts(config, state, db) {
     sounding: [...sounding.entries()].filter(([, e]) => !e.done).map(([key]) => key)
   })
   const maintSent = new Map()
-  const startedAt = Date.now()
+  // Monotonic, deliberately. This used to be Date.now(), and the whole point of
+  // it is to not cry offline in the first ten minutes after a boot - which is
+  // precisely the window in which a Pi's clock jumps to the real time. The jump
+  // made `now - startedAt` twenty hours, the grace period was over before it
+  // began, and the alarm sounded on a healthy tank at every reboot.
+  const startedAtUptime = uptimeMs()
 
   // Active alerts carry their own text now, so the display can render them
   // without knowing what any key means.
@@ -339,7 +345,7 @@ export function startAlerts(config, state, db) {
     }
 
     // Apex stopped reporting (grace period after boot)
-    if (now - startedAt > APEX_STALE_MS) {
+    if (uptimeMs() - startedAtUptime > APEX_STALE_MS) {
       const stale = !state.tank.updatedAt || now - state.tank.updatedAt > APEX_STALE_MS
       if (stale) {
         raise('apex:offline', 'Apex OFFLINE',
@@ -401,7 +407,7 @@ export function startAlerts(config, state, db) {
     }
 
     // CO2 sensor stopped reporting
-    if (now - startedAt > ENV_STALE_MS) {
+    if (uptimeMs() - startedAtUptime > ENV_STALE_MS) {
       const ts = state.environment?.ts
       const stale = !ts || now - ts > ENV_STALE_MS
       if (stale) {
