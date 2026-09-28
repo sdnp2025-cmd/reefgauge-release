@@ -85,6 +85,22 @@ verify_dashboard() {
 
 verify_dashboard || rollback
 
+# And does it actually run. The checks above confirm a build produced something
+# of a plausible size; they cannot tell whether it works. A bundle can be
+# perfectly well-formed and throw on the first render - JSX referencing a
+# variable that was never destructured builds cleanly, passes every size check,
+# and leaves the kiosk frozen on whatever it had last drawn.
+#
+# The server serves web/dist from disk, so it is already serving the new build
+# by the time this runs - no restart needed to test it, and the snapshot below
+# is still intact to go back to.
+echo "==> Checking the dashboard renders"
+if command -v chromium >/dev/null 2>&1; then
+  node scripts/check-render.mjs "http://127.0.0.1:${REEF_PORT:-8080}/" || rollback
+else
+  echo "    (chromium not installed - skipped)"
+fi
+
 # Only now is the new build good; drop the snapshot and stop rolling back.
 trap - ERR
 rm -rf web/dist.prev
