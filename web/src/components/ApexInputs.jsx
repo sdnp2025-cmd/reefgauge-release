@@ -17,6 +17,31 @@ import { GAUGE_ORDER, LONG, fmtVal } from './HomeCards.jsx'
 
 const SOURCE_LABEL = { aquawiz: 'AquaWiz', ekoral: 'Ekoral' }
 
+// An Apex reports everything it has - every outlet's amps and watts, every
+// voltage. Forty-odd entries is a long scroll on a wet touchscreen when three
+// of them are plausible, so the ones that could actually be this measurement go
+// first. Nothing is hidden: the whole list is still there, because the reason
+// this screen exists is that the automatic guess was wrong, and a filter built
+// on the same guess would hide exactly the input someone came here to find.
+const LIKELY_TYPE = {
+  temp: ['temp'], ph: ['ph'], salinity: ['cond'],
+  // A KH monitor arrives on a pH input, so pH is a first-class candidate for
+  // alkalinity rather than a surprise.
+  alk: ['alk', 'ph'], ca: ['ca'], mg: ['mg'], no3: ['no3'], po4: ['po4']
+}
+
+function rankFor(param) {
+  const wanted = LIKELY_TYPE[param] ?? []
+  return (input) => {
+    const type = String(input.type ?? '').toLowerCase()
+    const at = wanted.indexOf(type)
+    if (at >= 0) return at
+    // Power and current can never be a water measurement.
+    if (/^(amps|pwr|volts|w)$/i.test(type)) return 90
+    return 50
+  }
+}
+
 // Offered only for alkalinity, because that is the only parameter these devices
 // carry on somebody else's input type.
 const KH_DEVICES = [
@@ -91,7 +116,12 @@ export default function ApexInputs() {
             <span className="ai-meta">the gauge stays empty</span>
           </button>
 
-          {inputs.map((i) => (
+          {[...inputs]
+            .map((i, idx) => ({ i, idx, r: rankFor(picking)(i) }))
+            // idx keeps it stable within a rank, so the order does not shuffle
+            // between polls while someone is looking at it.
+            .sort((a, b) => a.r - b.r || a.idx - b.idx)
+            .map(({ i }) => (
             <button key={i.name} className={`ai-row ${current === i.name ? 'on' : ''}`}
                     disabled={busy} onClick={() => assign(picking, i.name)}>
               <span className="ai-name">{i.name}</span>
