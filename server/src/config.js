@@ -30,7 +30,17 @@ export function saveConfigAtomic(configPath, data) {
 }
 
 export function loadConfig() {
-  const configPath = path.join(serverRoot, 'config.json')
+  // Both of these are overridable by environment, because on a read-only root
+  // the checkout is not writable and everything that changes has to live on the
+  // /data partition instead. The systemd unit sets them; a development checkout
+  // sets neither and behaves exactly as before.
+  //
+  // An environment variable rather than a symlink or a bind mount, deliberately:
+  // saveConfigAtomic() commits with fs.renameSync, which needs the temp file and
+  // the target on one filesystem and fails EXDEV across a symlink to another -
+  // and fails EBUSY onto a single-file bind mount, because the target is then a
+  // mount point. Relocating the path avoids both.
+  const configPath = process.env.REEFGAUGE_CONFIG ?? path.join(serverRoot, 'config.json')
   const examplePath = path.join(serverRoot, 'config.example.json')
   let file = configPath
   let isExample = false
@@ -59,7 +69,13 @@ export function loadConfig() {
   config.configPath = configPath
   config.examplePath = examplePath
   config.isExample = isExample
-  config.db = path.resolve(serverRoot, config.db ?? './data/reef.db')
+  // REEFGAUGE_DATA wins over the config's own value, so a unit whose config was
+  // written before the move still puts its database in the right place. Every
+  // other data path is derived from this one - photos, the coral journal, the
+  // restore-aside directory - so this single line relocates all of them.
+  config.db = process.env.REEFGAUGE_DATA
+    ? path.join(process.env.REEFGAUGE_DATA, 'reef.db')
+    : path.resolve(serverRoot, config.db ?? './data/reef.db')
 
 
   // Fail closed. The API token used to be generated only when the wizard

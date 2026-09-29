@@ -81,6 +81,35 @@ render_unit() {  # render_unit <src> <dest>
 }
 render_unit "$REPO_DIR/pi/reef-server.service" /etc/systemd/system/reef-server.service
 render_unit "$REPO_DIR/pi/co2-daemon.service" /etc/systemd/system/co2-daemon.service
+
+# A sealed unit keeps everything writable on its own partition, because the root
+# filesystem is mounted read-only. A development checkout has no /data and is
+# left exactly as it was - which is why this is a drop-in rather than a change
+# to the units themselves.
+if findmnt -no TARGET /data > /dev/null 2>&1; then
+  echo "    /data is mounted - configuring this unit as sealed"
+  sudo install -d /etc/systemd/system/reef-server.service.d
+  sudo tee /etc/systemd/system/reef-server.service.d/10-data.conf > /dev/null <<'DROPIN'
+# Written by pi/install.sh on a unit with a /data partition.
+[Unit]
+# Without this the server can start before /data is mounted, create its
+# database in the mount point on the read-only root, and then have it
+# disappear under it when the real partition mounts on top.
+RequiresMountsFor=/data
+
+[Service]
+Environment=REEFGAUGE_CONFIG=/data/reefgauge/config.json
+Environment=REEFGAUGE_DATA=/data/reefgauge
+# Backup and restore stage through the system temp directory: a backup holds a
+# copy of the database AND every photo AND the tarball of both, and a restore
+# accepts an archive up to 2 GB and then unpacks it. On a 2 GB Pi with a tmpfs
+# /tmp, the customer's own backup is what takes the unit down - and the restore
+# case does it at the exact moment they are recovering from a failure.
+Environment=TMPDIR=/data/tmp
+DROPIN
+  sudo install -d -o "$RT_USER" -g "$RT_USER" /data/reefgauge /data/tmp
+fi
+
 sudo systemctl daemon-reload
 sudo systemctl enable --now reef-server.service co2-daemon.service
 # Units imaged before Sep 2026 had a voice daemon; it is gone, and a unit that

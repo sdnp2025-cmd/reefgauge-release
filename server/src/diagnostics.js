@@ -99,13 +99,38 @@ async function storage(dataDir) {
     `${Math.round(freeMb)} MB free of ${Math.round(totalMb)} MB`,
     freeMb < 80 ? 'Low free memory; the kiosk browser may be restarted by the kernel.' : null))
 
-  // Read-only root is what an SD card does when it is dying.
-  const mounts = await run('findmnt', ['-no', 'OPTIONS', '/'])
-  if (mounts) {
-    out.push(check('rootfs', 'Filesystem', mounts.split(',')[0] === 'ro' ? 'fail' : 'ok',
-      mounts.split(',')[0],
-      mounts.split(',')[0] === 'ro' ? 'The root filesystem has gone read-only - the SD card is failing or was pulled live.' : null,
-      mounts.split(',')[0] === 'ro' ? 'Re-image onto a new card; this one is not trustworthy.' : null))
+  // Read-only root means one of two opposite things, and which one depends on
+  // whether this unit was built to be read-only.
+  //
+  // On an ordinary unit it is what an SD card does when it is dying, and saying
+  // so is right. On a sealed unit it is the design, and reporting it as a
+  // failure would tell every healthy customer their card was untrustworthy and
+  // send them to re-image a working terminal - losing anything not on /data.
+  //
+  // The two are told apart by /data itself: a sealed unit has a separate
+  // writable partition, and that is where the real failure now lives. A sealed
+  // unit whose /data is missing or read-only cannot save a reading, a setting
+  // or a photograph, and that is the state worth shouting about.
+  const rootOpts = await run('findmnt', ['-no', 'OPTIONS', '/'])
+  const dataOpts = await run('findmnt', ['-no', 'OPTIONS', path.dirname(dataDir)])
+    ?? await run('findmnt', ['-no', 'OPTIONS', dataDir])
+  const rootRo = rootOpts ? rootOpts.split(',')[0] === 'ro' : false
+  const sealed = !!dataOpts   // /data is a mount of its own, so this unit is sealed
+
+  if (rootOpts && !sealed) {
+    out.push(check('rootfs', 'Filesystem', rootRo ? 'fail' : 'ok',
+      rootOpts.split(',')[0],
+      rootRo ? 'The root filesystem has gone read-only - the SD card is failing or was pulled live.' : null,
+      rootRo ? 'Re-image onto a new card; this one is not trustworthy.' : null))
+  } else if (rootOpts) {
+    const dataRw = dataOpts.split(',')[0] === 'rw'
+    out.push(check('rootfs', 'Filesystem',
+      !rootRo ? 'warn' : dataRw ? 'ok' : 'fail',
+      `root ${rootOpts.split(',')[0]}, data ${dataOpts.split(',')[0]}`,
+      !rootRo ? 'The root filesystem is writable on a unit that should be sealed.'
+        : dataRw ? null : 'The data partition is not writable - nothing can be saved.',
+      !rootRo ? 'Left unsealed after servicing; re-seal before shipping.'
+        : dataRw ? null : 'Readings, settings and photos are being lost. This needs a card.'))
   }
 
   try {
