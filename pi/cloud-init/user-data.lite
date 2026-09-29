@@ -1,0 +1,102 @@
+#cloud-config
+# ReefGauge golden-image build card — Raspberry Pi OS **Lite**.
+#
+# Everything here runs once, on the first boot of a freshly written card, before
+# anything else touches the unit. It exists so that building a sellable image is
+# a repeatable process rather than a list of steps someone has to remember: each
+# raspi-config line below was a manual instruction in docs/FACTORY.md, and a
+# manual step in a factory process is a defect waiting for a tired evening.
+#
+# Lite, not the desktop image. There is no desktop to autologin into and none to
+# hide: the kiosk is cage on tty1, installed as a system service by
+# pi/install.sh. Most of what the desktop build spent its configuration on —
+# suppressing the taskbar, the default-password prompt, the on-screen keyboard
+# and the file manager's wallpaper — simply does not exist here.
+#
+# The SSH key is for BUILDING this image. pi/install.sh --factory deletes it
+# before the card is imaged, so no shipped unit carries a way in.
+
+manage_resolv_conf: false
+
+# Lowercase deliberately: mixed-case hostnames are handled inconsistently by
+# some tooling, and the docs and the puck's service lookup both use lowercase.
+hostname: reef-terminal
+manage_etc_hosts: true
+
+packages:
+  # The terminal advertises itself as _reefgauge._tcp so the CO2 puck can find
+  # it by service rather than by name — every unit ships with the same hostname
+  # and mDNS silently renames the second one it sees.
+  - avahi-daemon
+  # The kiosk: a wlroots compositor that runs one fullscreen client and nothing
+  # else. Lite has no compositor at all without it.
+  - cage
+  # The alarm is played with aplay (server/src/alarmSound.js) and Lite does not
+  # ship it. Without this the product's only audible alarm is silent, and the
+  # spawn failure is swallowed, so nothing reports it.
+  - alsa-utils
+  # The USB backup flow looks for a mounted drive. Lite mounts nothing on its
+  # own, so without this a stick physically in the port reads as
+  # "no USB drive is plugged in".
+  - udisks2
+  # For confirming the SCD41 answers: i2cdetect -y 1 should show 62.
+  - i2c-tools
+  - git
+  - curl
+
+apt:
+  preserve_sources_list: true
+  conf: |
+    Acquire {
+      Check-Date "false";
+    };
+
+timezone: America/New_York
+keyboard:
+  model: pc105
+  layout: "us"
+
+users:
+  - name: pi
+    shell: /bin/bash
+    # video/render for the DRM device and input for the touchscreen: cage needs
+    # all three or it exits immediately and the wall stays black.
+    groups: [adm, dialout, cdrom, sudo, audio, video, plugdev, games, users, input, netdev, render]
+    # No password, by design. A byte-identical image cannot carry a unique
+    # per-unit password, and a shared one is precisely the shipped default
+    # credential that UK PSTI and the EU CRA prohibit. So there is no password:
+    # the kiosk owns the screen, and remote access is the customer-initiated
+    # support relay, not a login.
+    lock_passwd: true
+    # install.sh needs unattended sudo to build the image. The factory step
+    # narrows this to the specific commands the running product needs.
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    ssh_authorized_keys:
+      - __SSH_KEY__
+
+# Key only. Never a password, at any point in this card's life.
+ssh_pwauth: false
+
+runcmd:
+  # Radio unblocked so the customer's wizard can find their network. No Wi-Fi is
+  # configured here, deliberately — the buyer does that in the wizard, and a
+  # bench network baked into the image would ship inside every card.
+  - [ rfkill, unblock, wifi ]
+  - [ sh, -c, "for f in /var/lib/systemd/rfkill/*:wlan; do echo 0 > \"$f\"; done" ]
+
+  # I2C for the SCD41. Was "next step 2" printed at the end of install.sh —
+  # i.e. a thing a human had to remember on every single build.
+  - [ raspi-config, nonint, do_i2c, "0" ]
+
+  # Console blanking off. It is a wall panel; a blank screen is a support call.
+  # No do_boot_behaviour here: on Lite there is no desktop to autologin into,
+  # and the kiosk takes tty1 as a system service instead.
+  - [ raspi-config, nonint, do_blanking, "1" ]
+
+  # Hardware access groups, tolerantly — these exist on Raspberry Pi OS, but one
+  # missing must not abort first boot and leave the unit half-built.
+  - [ sh, -c, "for g in i2c gpio spi render input video; do adduser pi $g 2>/dev/null || true; done" ]
+
+  # SSH for the build only. Removed from shipped units by the factory step.
+  - [ systemctl, enable, ssh ]
+  - [ systemctl, start, ssh ]
