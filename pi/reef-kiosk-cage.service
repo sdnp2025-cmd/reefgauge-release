@@ -1,0 +1,58 @@
+# ReefGauge kiosk on Raspberry Pi OS Lite.
+#
+# Lite has no desktop, so there is no session to start the browser from and no
+# compositor for it to talk to. cage is both: a wlroots compositor that runs
+# exactly one application, fullscreen, with no decoration, no launcher and
+# nothing to alt-tab to.
+#
+# This replaces reef-kiosk.service (a USER service that waited for labwc's
+# socket) and, with it, the whole block in install.sh that suppressed the
+# taskbar, the default-password prompt, the on-screen keyboard and the file
+# manager's wallpaper. On Lite none of those exist to suppress. A kiosk built
+# on a desktop spends most of its configuration hiding the desktop.
+#
+# wlr-randr still works because cage is wlroots-based, so kiosk.sh's correction
+# for the MPI1001's lying EDID is unaffected.
+
+[Unit]
+Description=ReefGauge kiosk
+# The login prompt and the kiosk cannot both own tty1.
+Conflicts=getty@tty1.service
+After=getty@tty1.service systemd-user-sessions.service
+# Plymouth must have let go of the framebuffer first, or cage starts against a
+# display something else is still holding.
+After=plymouth-quit-wait.service
+Wants=reef-server.service
+After=reef-server.service
+# Restart limits belong here, not in [Service] - systemd ignores them there,
+# and the 5-in-10s default then latches a briefly flapping browser off.
+StartLimitIntervalSec=300
+StartLimitBurst=20
+
+[Service]
+Type=simple
+User=__USER__
+# A real login session, via logind. Without it there is no seat, and with no
+# seat cage cannot open the DRM device or any input: it exits immediately and
+# the wall stays black. XDG_RUNTIME_DIR is set by logind as part of the same
+# session, which is what kiosk.sh writes Chromium's cache and profile into.
+PAMName=login
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+StandardInput=tty-fail
+StandardOutput=journal
+StandardError=journal
+UtmpIdentifier=tty1
+UtmpMode=user
+
+# cage runs one client and exits when it exits, so a dead browser takes the
+# compositor with it and systemd brings the pair back - which is the restart
+# behaviour the user service had, with one fewer moving part.
+ExecStart=/usr/bin/cage -- /bin/bash __HOME__/reef-terminal/pi/kiosk.sh
+Restart=always
+RestartSec=2
+
+[Install]
+# Lite boots to multi-user.target; there is no graphical.target to hang this on.
+WantedBy=multi-user.target

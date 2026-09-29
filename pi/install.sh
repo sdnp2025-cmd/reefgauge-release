@@ -91,6 +91,52 @@ sudo systemctl daemon-reload 2>/dev/null || true
 
 chmod +x "$REPO_DIR/pi/kiosk.sh"
 
+# Is there a desktop to work with?
+#
+# Shipped units run Raspberry Pi OS Lite: no desktop, no labwc, no taskbar and
+# no file manager. The bench unit still runs the desktop image, so this detects
+# rather than assumes - and it detects by the presence of the very file the
+# desktop branch edits, so it cannot be wrong about it.
+#
+# On Lite this script used to abort outright further down, where it sed-ed
+# /etc/xdg/labwc/autostart under `set -euo pipefail`. That file ships with the
+# desktop packages and does not exist on Lite, so the installer died there and
+# left the unit half-built.
+#
+# Note how much of the desktop branch is the product hiding the desktop: the
+# taskbar, the default-password prompt, the on-screen keyboard, the file
+# manager's wallpaper. On Lite there is nothing to hide, and it all goes away.
+#
+# The branch bodies are NOT indented, deliberately. Several of them are heredocs
+# and a heredoc terminator must sit at column 0 - indenting this block for looks
+# is what makes `cat <<EOF` run to the end of the file.
+HAS_DESKTOP=0
+[ -f /etc/xdg/labwc/autostart ] && HAS_DESKTOP=1
+
+if [ "$HAS_DESKTOP" -eq 0 ]; then
+echo "==> Installing the kiosk (Lite: cage on tty1)"
+# cage is compositor and launcher in one: a single fullscreen client, nothing
+# else on the screen, nothing to alt-tab to.
+#
+# alsa-utils because the alarm is played with aplay (server/src/alarmSound.js)
+# and Lite does not ship it - without this the product's only audible alarm is
+# silent, and the spawn failure is swallowed so nothing reports it.
+#
+# udisks2 because the USB backup flow looks for a mounted drive and Lite mounts
+# nothing on its own: without it, a stick physically in the port reads as
+# "no USB drive is plugged in".
+sudo apt-get install -y --no-install-recommends cage alsa-utils udisks2
+
+sed -e "s|__USER__|$RT_USER|g" -e "s|__HOME__|$RT_HOME|g" \
+  "$REPO_DIR/pi/reef-kiosk-cage.service" \
+  | sudo tee /etc/systemd/system/reef-kiosk.service > /dev/null
+sudo systemctl daemon-reload
+# The login prompt and the kiosk cannot both own tty1.
+sudo systemctl disable --now getty@tty1.service 2>/dev/null || true
+sudo systemctl enable reef-kiosk.service
+echo "    kiosk starts on tty1 at boot"
+
+else
 echo "==> Installing the kiosk as a restartable user service"
 # A crashed browser used to leave a bare desktop until someone SSH'd in; as a
 # user service it restarts itself. Replaces the old compositor autostart line.
@@ -165,6 +211,8 @@ sudo loginctl enable-linger "$RT_USER" 2>/dev/null || true
 systemctl --user daemon-reload 2>/dev/null || true
 systemctl --user enable reef-kiosk.service 2>/dev/null \
   || echo "    (enable manually once logged in: systemctl --user enable --now reef-kiosk)"
+fi
+
 
 echo "==> Hardening: watchdog and SD-card wear"
 # Hardware watchdog: if the kernel or systemd wedges, the Pi resets itself

@@ -57,11 +57,26 @@ fi
 CACHE_DIR="$XDG_RUNTIME_DIR/chromium-cache"
 mkdir -p "$CACHE_DIR"
 
+# And the profile, for the same reason and one more.
+#
+# Without --user-data-dir Chromium writes its profile into $HOME/.config, which
+# is a second constant write source on the card - and, once the root filesystem
+# is read-only, a directory it cannot create at all. It does not degrade: it
+# exits immediately, systemd restarts it, and after twenty attempts the unit
+# latches the kiosk off and the wall stays dark for good.
+#
+# Nothing in the profile is worth keeping. The dashboard is served from
+# localhost and the kiosk is exempt from auth by address (server/src/index.js),
+# so a wiped profile costs one re-fetch.
+PROFILE_DIR="$XDG_RUNTIME_DIR/chromium-profile"
+mkdir -p "$PROFILE_DIR"
+
 # The panel is a 10-point touchscreen and Chromium finds it — maxTouchPoints
 # reports 10 — but it left the touch event API off, so every finger arrived as
 # a mouse: taps worked, because a tap is a click, and nothing scrolled, because
 # a mouse drag is not a pan. Forced on below.
 exec "$CHROMIUM" \
+  --user-data-dir="$PROFILE_DIR" \
   --kiosk \
   --touch-events=enabled \
   --enable-gpu-rasterization \
