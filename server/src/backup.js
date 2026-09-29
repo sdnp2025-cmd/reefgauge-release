@@ -41,6 +41,9 @@ export const BACKUP_FORMAT = 1
 // Machine-local, and meaningless on a different unit. Stripped going out so
 // they never sit in the file, and preserved coming in so a restore cannot
 // point a unit at another machine's paths or steal its identity.
+// The photo directories on disk, by their real directory names.
+const PHOTO_DIRS = ['photos', 'corals']
+
 const UNIT_LOCAL_KEYS = ['apiToken', 'port', 'db', 'configPath']
 
 const rm = (p) => fs.rmSync(p, { recursive: true, force: true })
@@ -68,7 +71,16 @@ export async function createBackup({ config, db, version, tankName, includePhoto
 
     const included = ['config.json', 'reef.db']
     if (includePhotos) {
-      for (const dir of ['photos', 'coral-photos']) {
+      // 'corals', not 'coral-photos'. The coral journal is stored in a
+      // directory called corals (index.js:146, corals.js:30); coral-photos is
+      // only the URL prefix it is served under (index.js:148). Backing up the
+      // URL meant fs.existsSync below was false every single time, `continue`
+      // fired, and no coral photograph has ever been in a backup - silently,
+      // because a skipped directory looks exactly like an empty one.
+      //
+      // These are records of a particular animal on a particular day. They are
+      // the least replaceable thing on the unit.
+      for (const dir of PHOTO_DIRS) {
         const src = path.join(dataDir, dir)
         if (!fs.existsSync(src)) continue
         fs.cpSync(src, path.join(staging, dir), { recursive: true })
@@ -174,7 +186,10 @@ export async function restoreBackup({ archive, config, version, dryRun = false }
       fs.copyFileSync(dbSrc, config.db)
     }
 
-    for (const dir of ['photos', 'coral-photos']) {
+    // Includes the legacy name so an archive written before the fix above still
+    // restores whatever it did contain, rather than quietly dropping it a
+    // second time.
+    for (const dir of [...PHOTO_DIRS, 'coral-photos']) {
       const from = path.join(staging, dir)
       if (!fs.existsSync(from)) continue
       const to = path.join(dataDir, dir)

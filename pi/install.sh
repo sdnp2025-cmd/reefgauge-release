@@ -192,6 +192,32 @@ sudo systemctl restart systemd-journald || true
 # state AND scrubs this machine's identity, because everything left behind here
 # is cloned byte-for-byte onto every unit sold.
 if [ "${1:-}" = "--factory" ]; then
+  # Gate, not advice.
+  #
+  # This block used to end by *printing* a reminder to change the password. An
+  # echo at the end of a long install is not a control: it scrolls past, and
+  # what it was guarding gets stamped onto every card in the production run.
+  # Anything that must be true of a shipped unit is checked here and refuses.
+  EXPECTED_REMOTE="${REEF_RELEASE_REMOTE:-https://github.com/sdnp2025-cmd/reefgauge-release.git}"
+  ACTUAL_REMOTE="$(git -C "$REPO_DIR" remote get-url origin 2>/dev/null || echo none)"
+  if [ "$ACTUAL_REMOTE" != "$EXPECTED_REMOTE" ]; then
+    echo
+    echo "!! REFUSING to prepare a factory image."
+    echo "   This checkout's origin is:  $ACTUAL_REMOTE"
+    echo "   A shipped unit's must be:   $EXPECTED_REMOTE"
+    echo
+    echo "   Two things go wrong if this is imaged. The .git directory carries"
+    echo "   that repository's entire history onto every customer's card - and"
+    echo "   for the private repo that means the patent disclosure, the case"
+    echo "   designs, the relay server and the support tooling, readable in any"
+    echo "   laptop. And origin then points somewhere no unit can authenticate"
+    echo "   to, so every over-the-air update fails, for the whole fleet,"
+    echo "   forever - with nothing revealing it until the first security fix."
+    echo
+    echo "   Re-clone from the release remote and run the install again."
+    exit 1
+  fi
+
   echo "==> Factory reset: clearing config and data (wizard will run on boot)"
   rm -f "$REPO_DIR/server/config.json"
   rm -rf "$REPO_DIR/server/data"
@@ -213,12 +239,37 @@ if [ "${1:-}" = "--factory" ]; then
   # image — readable by anyone who mounts the card.
   sudo rm -f /etc/NetworkManager/system-connections/*.nmconnection
 
+  # The key that built this image. Left in place it is a permanent way into
+  # every unit ever sold, and one leaked private key opens the whole fleet.
+  # known_hosts and any stray private key go with it.
+  sudo rm -rf "$RT_HOME/.ssh"
+
+  # No password on a shipped unit - not a password to be remembered and
+  # changed. A golden image is byte-identical, so it cannot carry a per-unit
+  # password, and a shared one is the shipped default credential UK PSTI and
+  # the EU CRA prohibit. Locking it means there is nothing to guess and nothing
+  # to remember. Physical access still reaches the kiosk (as with any
+  # appliance); remote access is the customer-initiated relay in
+  # server/src/supportSession.js.
+  sudo passwd --lock "$RT_USER" > /dev/null 2>&1 \
+    || echo "    (could not lock $RT_USER - do NOT image this card)"
+  sudo sed -i 's/^#\?PasswordAuthentication .*/PasswordAuthentication no/' \
+    /etc/ssh/sshd_config 2>/dev/null || true
+
   # Shell history and logs from the build bench.
   rm -f "$RT_HOME/.bash_history" "$RT_HOME/.python_history" 2>/dev/null || true
   sudo rm -rf /var/log/journal/* /tmp/* 2>/dev/null || true
 
-  echo "==> Factory image ready. Change the login password before imaging if it"
-  echo "    is still the build-bench default, then: sudo shutdown now"
+  # Prove it rather than claim it - these are the two that cannot be undone
+  # once a production run is stamped.
+  FAILED=0
+  [ -e "$RT_HOME/.ssh" ] && { echo "!! $RT_HOME/.ssh still present"; FAILED=1; }
+  sudo passwd --status "$RT_USER" 2>/dev/null | grep -qE ' (L|LK) ' \
+    || { echo "!! $RT_USER's password is not locked"; FAILED=1; }
+  [ "$FAILED" -eq 0 ] || { echo "!! DO NOT image this card."; exit 1; }
+
+  echo "==> Factory image verified: release remote, no password, no build key."
+  echo "    Now: sudo shutdown now"
 fi
 
 echo
