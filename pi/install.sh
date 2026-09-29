@@ -55,8 +55,21 @@ sudo rm -f /etc/sudoers.d/reef-terminal-nmcli
 # after a kernel update, the boot-screen installer writes a Plymouth theme,
 # and a support session needs to bounce the unit. Specific commands only.
 echo "==> Allowing reboot, power off and the boot-screen installer without a password"
+#
+# The three scripts are granted at their /opt copies, NOT in the checkout.
+#
+# sudo grants root to a PATH, so the file at that path must be one the granted
+# user cannot rewrite. On a sealed unit the checkout lives on the writable
+# /data partition - so granting NOPASSWD to a script inside it would hand root
+# to anything that could write a file there, which is the whole application.
+# /opt/reefgauge is on the read-only root and is the only safe place for them.
+sudo install -d -m 755 /opt/reefgauge
+for script in install.sh install-splash.sh mdns-service.sh kiosk.sh expand-data.sh; do
+  [ -f "$REPO_DIR/pi/$script" ] && sudo install -m 755 "$REPO_DIR/pi/$script" "/opt/reefgauge/$script"
+done
+
 sudo tee /etc/sudoers.d/reef-terminal-ops > /dev/null <<SUDOERS
-$RT_USER ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/sbin/reboot, $RT_HOME/reef-terminal/pi/install-splash.sh, $RT_HOME/reef-terminal/pi/install.sh, $RT_HOME/reef-terminal/pi/mdns-service.sh, /usr/bin/systemctl daemon-reload
+$RT_USER ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/sbin/reboot, /opt/reefgauge/install-splash.sh, /opt/reefgauge/install.sh, /opt/reefgauge/mdns-service.sh, /usr/bin/systemctl daemon-reload
 SUDOERS
 sudo chmod 440 /etc/sudoers.d/reef-terminal-ops
 sudo visudo -c -q
@@ -88,6 +101,8 @@ render_unit "$REPO_DIR/pi/co2-daemon.service" /etc/systemd/system/co2-daemon.ser
 # to the units themselves.
 if findmnt -no TARGET /data > /dev/null 2>&1; then
   echo "    /data is mounted - configuring this unit as sealed"
+  render_unit "$REPO_DIR/pi/reefgauge-expand-data.service" /etc/systemd/system/reefgauge-expand-data.service
+  sudo systemctl enable reefgauge-expand-data.service 2>/dev/null || true
   sudo install -d /etc/systemd/system/reef-server.service.d
   sudo tee /etc/systemd/system/reef-server.service.d/10-data.conf > /dev/null <<'DROPIN'
 # Written by pi/install.sh on a unit with a /data partition.

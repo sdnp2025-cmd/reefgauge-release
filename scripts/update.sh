@@ -117,9 +117,18 @@ sudo -n systemctl daemon-reload 2>/dev/null || true
 # update is the only way they will ever get one. Idempotent, so this costs a
 # file comparison on every other update.
 echo "==> Network advertisement"
-sudo -n bash "$REPO_DIR/pi/mdns-service.sh" 2>/dev/null \
-  || bash "$REPO_DIR/pi/mdns-service.sh" 2>/dev/null \
-  || echo "    (needs a re-run of pi/install.sh on this unit to gain permission)"
+# `sudo -n /opt/...`, not `sudo -n bash /opt/...`. sudoers grants a COMMAND, and
+# the command in the second form is bash - so the grant never matched and this
+# silently fell through to the unprivileged attempt every time.
+if sudo -n /opt/reefgauge/mdns-service.sh 2>/dev/null; then
+  :
+elif sudo -n "$REPO_DIR/pi/mdns-service.sh" 2>/dev/null; then
+  :   # a unit installed before the scripts moved to /opt
+elif bash "$REPO_DIR/pi/mdns-service.sh" 2>/dev/null; then
+  :   # already root, or the file is already correct and it exits 0
+else
+  echo "    (needs a re-run of pi/install.sh on this unit to gain permission)"
+fi
 
 echo "==> Restarting services"
 sudo systemctl restart co2-daemon.service 2>/dev/null || true

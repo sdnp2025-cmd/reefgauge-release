@@ -1,0 +1,29 @@
+# Grow /data to fill the card, once, on the first boot after imaging.
+#
+# Ordered before reef-server so the server never sees a nearly-full partition
+# that is about to become a large empty one, and After the mount because there
+# is nothing to grow until /data is there.
+
+[Unit]
+Description=ReefGauge: expand /data to fill the card
+DefaultDependencies=no
+After=data.mount local-fs.target
+Requires=data.mount
+Before=reef-server.service
+ConditionPathExists=/data
+# Runs once. The stamp lives on /data itself, so a card re-imaged from this
+# master expands again - which is the whole point.
+ConditionPathExists=!/data/.expanded
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/reefgauge/expand-data.sh
+ExecStartPost=/bin/touch /data/.expanded
+# Never block the boot. A unit with a small /data still watches a tank.
+TimeoutStartSec=120
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

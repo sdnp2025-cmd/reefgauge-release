@@ -95,6 +95,39 @@ if [ -f "$RT_HOME/reef-terminal/server/config.json" ]; then
   ok "config.json"
 fi
 
+# The application itself, because an update writes to it.
+#
+# An over-the-air update is `git pull`, then `npm install` twice, then a Vite
+# build - all inside the checkout. On a read-only root none of that can happen,
+# so a sealed unit with the app on / is a unit that can never be patched. The
+# checkout moves to /data and a symlink is left behind, so every path that
+# refers to it - the systemd units, update.sh, the support tooling - keeps
+# working without knowing.
+#
+# This is exactly why the privileged scripts are granted at /opt/reefgauge and
+# not here: sudo grants root to a path, and this path is now writable by the
+# application. See pi/install.sh.
+say "Moving the application onto /data"
+if [ -d "$RT_HOME/reef-terminal" ] && [ ! -L "$RT_HOME/reef-terminal" ]; then
+  do_it "install -d -o '$RT_USER' -g '$RT_USER' /data/app"
+  do_it "cp -a '$RT_HOME/reef-terminal' /data/app/reef-terminal"
+  do_it "rm -rf '$RT_HOME/reef-terminal'"
+  do_it "ln -sfn /data/app/reef-terminal '$RT_HOME/reef-terminal'"
+  do_it "chown -h '$RT_USER:$RT_USER' '$RT_HOME/reef-terminal'"
+  ok "checkout now at /data/app/reef-terminal (symlinked from \$HOME)"
+else
+  note "already a symlink, or no checkout here - leaving it alone"
+fi
+
+# Confirm the grants point somewhere this user cannot rewrite. Getting this
+# wrong is a root escalation, not a broken feature.
+if grep -q '/opt/reefgauge/' /etc/sudoers.d/reef-terminal-ops 2>/dev/null; then
+  ok "sudo grants point at /opt (read-only)"
+else
+  die "sudoers still grants scripts inside the checkout, which is now writable.
+   That is a root escalation. Re-run pi/install.sh before sealing."
+fi
+
 # Paths the OS fixes and the application cannot be told about. Each one is here
 # because losing it costs the customer something specific:
 #
