@@ -56,10 +56,24 @@ sudo rm -f /etc/sudoers.d/reef-terminal-nmcli
 # and a support session needs to bounce the unit. Specific commands only.
 echo "==> Allowing reboot, power off and the boot-screen installer without a password"
 sudo tee /etc/sudoers.d/reef-terminal-ops > /dev/null <<SUDOERS
-$RT_USER ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/sbin/reboot, $RT_HOME/reef-terminal/pi/install-splash.sh, $RT_HOME/reef-terminal/pi/install.sh, /usr/bin/systemctl daemon-reload
+$RT_USER ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/sbin/reboot, $RT_HOME/reef-terminal/pi/install-splash.sh, $RT_HOME/reef-terminal/pi/install.sh, $RT_HOME/reef-terminal/pi/mdns-service.sh, /usr/bin/systemctl daemon-reload
 SUDOERS
 sudo chmod 440 /etc/sudoers.d/reef-terminal-ops
 sudo visudo -c -q
+
+# Announce the terminal as a service, not just a hostname.
+#
+# The puck used to find its terminal by resolving a fixed name. That works until
+# two terminals share a network: mDNS conflict resolution silently renames the
+# second to reef-terminal-2.local, the name still resolves - to the *other*
+# unit - and a puck starts reporting its cabinet CO2 to somebody else's tank,
+# with nothing anywhere saying so.
+#
+# A service advertisement survives that rename, because it is published under
+# whatever the host ends up called. %h expands to the current hostname and is
+# re-expanded when it changes, so this needs no maintenance.
+echo "==> Advertising the terminal on the network (mDNS)"
+sudo bash "$(dirname "$0")/mdns-service.sh"
 
 echo "==> Installing systemd services"
 render_unit() {  # render_unit <src> <dest>

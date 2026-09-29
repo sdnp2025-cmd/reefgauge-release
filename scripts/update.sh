@@ -113,6 +113,14 @@ echo "==> Python deps (best effort)"
 sudo -n systemctl disable --now voice-daemon.service 2>/dev/null || true
 sudo -n rm -f /etc/systemd/system/voice-daemon.service 2>/dev/null || true
 sudo -n systemctl daemon-reload 2>/dev/null || true
+# Units built before service discovery existed have no advertisement, and an
+# update is the only way they will ever get one. Idempotent, so this costs a
+# file comparison on every other update.
+echo "==> Network advertisement"
+sudo -n bash "$REPO_DIR/pi/mdns-service.sh" 2>/dev/null \
+  || bash "$REPO_DIR/pi/mdns-service.sh" 2>/dev/null \
+  || echo "    (needs a re-run of pi/install.sh on this unit to gain permission)"
+
 echo "==> Restarting services"
 sudo systemctl restart co2-daemon.service 2>/dev/null || true
 sudo systemctl restart reef-server.service
