@@ -18,6 +18,7 @@ import { discoverRedSea, probeRedSeaDevice } from '../pollers/redsea.js'
 import { mintSession, sessionFor, isLocalRequest, SESSION_TTL_MS } from '../phoneSession.js'
 import { lanIp } from '../lan.js'
 import { DOSING_METHODS, methodFor } from '../dosingMethods.js'
+import { saveConfigAtomic } from '../config.js'
 
 const exec = promisify(execFile)
 
@@ -610,7 +611,29 @@ async function connectWifi(ssid, password) {
 
     if (DEMO) return { ok: true, demo: true, config: next }
 
-    fs.writeFileSync(config.configPath, JSON.stringify(next, null, 2))
+    // Atomically, and only then restart.
+    //
+    // This was a plain writeFileSync, which is the one thing saveConfigAtomic
+    // exists to prevent - its own comment says a torn write here "would leave
+    // unparseable JSON and a unit that boot-loops with no way in". This is the
+    // riskiest moment in the product's life for that: the customer has just
+    // finished the wizard and the very next thing the unit does is restart, so
+    // a half-written file is read back seconds later.
+    //
+    // And it was unguarded, so a failed write threw out of the handler: the
+    // customer saw a bare 500 at the end of setup with no idea whether anything
+    // had been saved. Now the failure says what it is, and the restart happens
+    // only if there is something worth restarting into.
+    try {
+      saveConfigAtomic(config.configPath, next)
+    } catch (err) {
+      req.log.warn({ err }, 'setup could not save the configuration')
+      return reply.code(500).send({
+        error: 'Could not save the settings to this terminal. '
+          + 'Nothing has been changed - your answers are still here, so you can try again. '
+          + `(${err.message})`
+      })
+    }
     // systemd (Restart=always) brings the server back up with the new config
     setTimeout(() => process.exit(0), 800)
     return { ok: true, restarting: true }

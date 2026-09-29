@@ -5,6 +5,7 @@ import fastifyStatic from '@fastify/static'
 import fastifyCors from '@fastify/cors'
 import fastifyMultipart from '@fastify/multipart'
 import { loadConfig } from './config.js'
+import { serveStorageFailure } from './storageFailure.js'
 import { startClockWatch, onClockStep, shift } from './clock.js'
 import { initDb, pruneOldReadings } from './db.js'
 import { startApexPoller } from './pollers/apex.js'
@@ -23,7 +24,17 @@ import { seedDemo } from './demo.js'
 import { authorize as authorizePhone } from './phoneSession.js'
 
 const config = loadConfig()
-const db = initDb(config.db)
+
+// Opening the database is the first thing that can fail, and it used to fail
+// fatally: initDb creates the data directory and opens the file, unguarded, so
+// a full card or an unwritable path killed the process before app.listen() and
+// systemd looped it for ever behind a black screen. Say what happened instead.
+let db
+try {
+  db = initDb(config.db)
+} catch (err) {
+  await serveStorageFailure(config, err)   // listens, and never returns
+}
 
 // Watch for the clock being stepped before anything starts recording times
 // against it. See clock.js: this machine has no real-time clock, so it boots
@@ -138,13 +149,20 @@ await app.register(systemRoutes, { config, state, db, support })
 
 // Uploaded family photos
 const photosDir = path.join(path.dirname(config.db), 'photos')
-fs.mkdirSync(photosDir, { recursive: true })
+// Non-fatal, deliberately: a terminal that cannot store family photographs is
+// still a terminal that watches a tank, and the alarm matters more than the
+// slideshow. The upload route fails on its own if this never appeared.
+try { fs.mkdirSync(photosDir, { recursive: true }) } catch (err) {
+  console.warn(`could not create the photo directory (${err.message}) - uploads will fail`)
+}
 await app.register(fastifyStatic, { root: photosDir, prefix: '/photos/', decorateReply: false })
 
 // Coral journal photos, kept apart from the slideshow: these are records of a
 // particular animal on a particular day, not pictures to shuffle on the wall.
 const coralDir = path.join(path.dirname(config.db), 'corals')
-fs.mkdirSync(coralDir, { recursive: true })
+try { fs.mkdirSync(coralDir, { recursive: true }) } catch (err) {
+  console.warn(`could not create the coral directory (${err.message}) - uploads will fail`)
+}
 await app.register(fastifyStatic, { root: coralDir, prefix: '/coral-photos/', decorateReply: false })
 
 // Serve the built dashboard when web/dist exists (production on the Pi).

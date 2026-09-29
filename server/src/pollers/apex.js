@@ -4,6 +4,7 @@
 
 import fs from 'node:fs'
 import { onClockStep, shift } from '../clock.js'
+import { saveConfigAtomic } from '../config.js'
 
 let sessionCookie = null
 
@@ -120,7 +121,11 @@ function adoptReturningInputs(config, inputs) {
     try {
       const onDisk = JSON.parse(fs.readFileSync(config.configPath, 'utf8'))
       onDisk.apex = { ...onDisk.apex, inputs: { ...onDisk.apex?.inputs, ...config.apex.inputs } }
-      fs.writeFileSync(config.configPath, JSON.stringify(onDisk, null, 2))
+      // Atomically. This runs on a background timer, unattended, on a device
+      // that gets unplugged - which is precisely the case saveConfigAtomic was
+      // written for. A plain write here could tear the customer's entire
+      // configuration in half at any moment, with nobody at the screen.
+      saveConfigAtomic(config.configPath, onDisk)
     } catch (err) {
       console.warn('Could not persist adopted inputs:', err.message)
     }
