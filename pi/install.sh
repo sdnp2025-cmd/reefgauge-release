@@ -10,6 +10,23 @@ REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 # fails on a customer's device with no obvious cause.
 RT_USER="${SUDO_USER:-$(id -un)}"
 RT_HOME="$(getent passwd "$RT_USER" | cut -d: -f6)"
+
+# Anything that writes into the checkout runs as the OWNER of the checkout, even
+# when this script is running as root.
+#
+# This script is granted NOPASSWD in sudoers, so it is legitimately run as root -
+# and then npm and vite wrote their output as root. The next unattended update,
+# running as the user, could not remove web/dist to replace it: the rollback
+# aborted halfway through deleting it, the dashboard 404'd, and the wall went
+# blank. Which is exactly the failure that update.sh's verify/rollback machinery
+# exists to prevent, arriving by the one route it does not cover.
+as_user() {
+  if [ "$(id -u)" -eq 0 ] && [ "$RT_USER" != root ]; then
+    sudo -u "$RT_USER" -H "$@"
+  else
+    "$@"
+  fi
+}
 echo "==> Installing for user '$RT_USER' ($RT_HOME)"
 
 echo "==> Installing Node.js 22 (NodeSource) if needed"
@@ -20,7 +37,7 @@ fi
 
 echo "==> Installing server dependencies"
 cd "$REPO_DIR/server"
-npm install
+as_user npm install
 if [ ! -f config.json ]; then
   cp config.example.json config.json
   echo "    Created server/config.json — EDIT IT with your Apex IP and location."
@@ -28,8 +45,8 @@ fi
 
 echo "==> Building the dashboard"
 cd "$REPO_DIR/web"
-npm install
-npm run build
+as_user npm install
+as_user npm run build
 
 echo "==> Setting up the CO2 sensor daemon (Python venv)"
 # Build prerequisites for the GPIO/audio Python packages (lgpio needs
@@ -40,8 +57,8 @@ echo "==> Setting up the CO2 sensor daemon (Python venv)"
 # a worse product than one apt package.
 sudo apt-get install -y python3-dev swig liblgpio-dev poppler-utils
 cd "$REPO_DIR/sensor"
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+as_user python3 -m venv .venv
+as_user .venv/bin/pip install -r requirements.txt
 
 echo "==> Allowing the server to manage Wi-Fi and restart services (wizard + OTA updates)"
 sudo tee /etc/sudoers.d/reef-terminal > /dev/null <<SUDOERS

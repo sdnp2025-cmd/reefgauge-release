@@ -29,6 +29,19 @@ fi
 PREV="$(git rev-parse HEAD)"
 echo "==> Current revision $PREV"
 
+# A previous `sudo bash pi/install.sh` built as root, so parts of web/dist can be
+# root-owned and unremovable by this script - and the failure lands mid-way
+# through the rollback's `rm -rf web/dist`, which deletes the dashboard and then
+# cannot restore it. The wall goes blank for the one reason update.sh exists to
+# prevent. install.sh no longer does that, but units built before it do not know.
+if [ -n "$(find web/dist web/dist.prev -user root 2>/dev/null | head -1)" ]; then
+  echo "==> Found root-owned build output from an older install; taking ownership"
+  sudo -n chown -R "$(id -un):$(id -gn)" web/dist web/dist.prev 2>/dev/null \
+    || { echo "!! web/dist is root-owned and cannot be reclaimed without a password."
+         echo "   Run once, then update again:  sudo chown -R $(id -un) ~/reef-terminal/web"
+         exit 4; }
+fi
+
 # Snapshot the built dashboard: it is what the customer actually sees, and a
 # failed rebuild would otherwise leave it missing or half-written.
 rm -rf web/dist.prev
