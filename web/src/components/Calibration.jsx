@@ -30,9 +30,21 @@ const WHERE = {
   cabinet: 'in the cabinet, measuring what the skimmer draws'
 }
 
+// "3 minutes ago" beats a timestamp on a wall panel, and "2 days ago" is the
+// whole story when a sensor has been unplugged.
+function ago(ms) {
+  if (ms == null) return 'never'
+  const s = Math.round(ms / 1000)
+  if (s < 90) return `${s}s ago`
+  const m = Math.round(s / 60)
+  if (m < 90) return `${m} min ago`
+  const h = Math.round(m / 60)
+  return h < 48 ? `${h} hours ago` : `${Math.round(h / 24)} days ago`
+}
+
 function Reading({ sensor }) {
   return (
-    <div className={`cal-sensor ${sensor.belowFreshAir ? 'suspect' : ''}`}>
+    <div className={`cal-sensor ${sensor.stale ? 'stale' : sensor.belowFreshAir ? 'suspect' : ''}`}>
       <div className="cal-sensor-head">
         <b>{NAME[sensor.location]}</b>
         <em>{WHERE[sensor.location]}</em>
@@ -42,8 +54,15 @@ function Reading({ sensor }) {
         <div><span>{show(sensor.co2Ppm)}</span><em>ppm CO₂</em></div>
       </div>
       <div className="cal-sensor-foot">
-        Correcting by {show(sensor.offsetC, 1)} °C
-        {sensor.offsetC === sensor.defaultOffsetC ? ' (never calibrated)' : ''}
+        {sensor.stale
+          // Say it plainly and stop. The numbers above are the last thing it
+          // said, not what it is saying, and nothing should be calibrated
+          // against them.
+          ? <b className="cal-stale">Not reporting — last heard from {ago(sensor.ageMs)}</b>
+          : <>
+              Correcting by {show(sensor.offsetC, 1)} °C
+              {sensor.offsetC === sensor.defaultOffsetC ? ' (never calibrated)' : ''}
+            </>}
       </div>
     </div>
   )
@@ -109,8 +128,9 @@ export default function Calibration() {
   if (error && !data) return <div className="setup-error">{error}</div>
   if (!data) return <div className="setup-note">Loading…</div>
 
-  const display = data.sensors.find((s) => s.location === 'display')
-  const cabinet = data.sensors.find((s) => s.location === 'cabinet')
+  const display = data.sensors.find((s) => s.location === 'display' && !s.stale)
+  const cabinet = data.sensors.find((s) => s.location === 'cabinet' && !s.stale)
+  const anyLive = data.sensors.some((s) => !s.stale)
   const spreadF = data.tempSpreadC == null ? null : (data.tempSpreadC * 9) / 5
 
   return (
@@ -156,10 +176,14 @@ export default function Calibration() {
         </div>
       )}
 
-      {!!data.sensors.length && (
+      {anyLive ? (
         <button className="setup-primary" disabled={busy} onClick={() => setKeypad(true)}>
           Enter the room temperature
         </button>
+      ) : (
+        <p className="setup-note">
+          Nothing is reporting, so there is nothing to calibrate yet.
+        </p>
       )}
 
       <h2>CO₂</h2>
@@ -175,7 +199,7 @@ export default function Calibration() {
         </p>
       ))}
 
-      {data.sensors.map((s) => (
+      {data.sensors.filter((s) => !s.stale).map((s) => (
         <div className="cal-frc" key={s.location}>
           <div className="cal-frc-head"><b>{NAME[s.location]}</b>
             {s.lastFrc && (

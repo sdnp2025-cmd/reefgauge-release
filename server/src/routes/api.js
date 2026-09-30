@@ -519,6 +519,13 @@ export default async function apiRoutes(app, { config, state, db }) {
   // What the calibration screen needs in one call: where each sensor is, what
   // it reads, what offset it is carrying, and whether it reads below outdoor
   // air - which is not a judgement call, it is impossible indoors.
+  // A sensor that stopped reporting still has a last reading, and the screen
+  // was showing it as though it were current - including the "below outdoor
+  // air, this needs recalibrating" warning, about a sensor that had been
+  // unplugged for two days. Same threshold as the offline alert, so the two
+  // never disagree.
+  const ENV_STALE_MS = 15 * 60 * 1000
+
   app.get('/api/environment/calibration', async () => {
     const describe = (location) => {
       const latest = location === 'cabinet' ? latestFor('cabinet') : (state.environment ?? latestFor('display'))
@@ -531,14 +538,25 @@ export default async function apiRoutes(app, { config, state, db }) {
         humidityPct: latest?.humidity_pct ?? null,
         offsetC: currentOffset(location),
         defaultOffsetC: OFFSET_DEFAULT[location],
-        belowFreshAir: latest?.co2_ppm != null && latest.co2_ppm < FRESH_AIR_PPM,
+        ageMs: latest?.ts != null ? Date.now() - latest.ts : null,
+        stale: latest?.ts == null || Date.now() - latest.ts > ENV_STALE_MS,
+        // Only meaningful about a reading that is actually current. A sensor
+        // that has been unplugged for two days is not reading low; it is not
+        // reading at all, and telling someone to recalibrate it sends them to
+        // the wrong problem.
+        belowFreshAir: latest?.co2_ppm != null && latest.co2_ppm < FRESH_AIR_PPM
+          && latest?.ts != null && Date.now() - latest.ts <= ENV_STALE_MS,
         pendingFrc: frcRequestFor(location),
         lastFrc: state.frcResult?.[location] ?? null
       }
     }
     const sensors = [describe('display'), describe('cabinet')].filter((s) => s.present)
-    const temps = sensors.map((s) => s.tempC).filter((t) => t != null)
-    const co2s = sensors.map((s) => s.co2Ppm).filter((c) => c != null)
+    // Comparing a live reading with a two-day-old one and calling the
+    // difference a disagreement is how you send someone to calibrate a sensor
+    // that is merely unplugged.
+    const live = sensors.filter((s) => !s.stale)
+    const temps = live.map((s) => s.tempC).filter((t) => t != null)
+    const co2s = live.map((s) => s.co2Ppm).filter((c) => c != null)
     return {
       freshAirPpm: FRESH_AIR_PPM,
       maxOffsetC: MAX_OFFSET_C,

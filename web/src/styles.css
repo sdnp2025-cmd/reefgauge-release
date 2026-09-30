@@ -3325,3 +3325,9 @@ body {
   color: var(--muted); border: 0.15vh solid var(--line, rgba(130,150,180,.35));
   white-space: nowrap;
 }
+
+/* A sensor that has stopped reporting. Dimmed rather than alarming: the tank
+   is fine, the reading is simply old, and the numbers above it are the last
+   thing it said rather than what it is saying. */
+.cal-sensor.stale { opacity: 0.55; border-style: dashed; }
+.cal-stale { color: var(--warn); font-weight: 700; }
