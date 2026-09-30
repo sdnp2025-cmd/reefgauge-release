@@ -145,8 +145,9 @@ async function storage(dataDir) {
 }
 
 // ---- services ---------------------------------------------------------------
-// The kiosk is a user unit, so it needs the user bus; the server and the
-// sensor daemon are system units. A unit that is "activating (auto-restart)"
+// The kiosk is a user unit on a desktop image and a SYSTEM unit on Lite, where
+// cage owns tty1 and there is no desktop session to hang a user service on. The
+// server and the sensor daemon are system units on both. A unit that is "activating (auto-restart)"
 // is not starting up, it is crash-looping - the distinction matters more than
 // any other single line in a support call.
 async function services(repoRoot) {
@@ -163,12 +164,29 @@ async function services(repoRoot) {
       crashing ? `Crash-looping (${restarts} restarts). It exits as soon as it starts.` : null,
       crashing ? `journalctl -u ${unit} -n 50 shows why.` : null))
   }
+  // Ask both buses, because which one owns the kiosk depends on the image.
+  //
+  // Asking only the user bus would report every Lite unit's display as broken
+  // while it worked perfectly - and offer `systemctl --user restart`, which on
+  // Lite is a command that does nothing. Same shape as the read-only-root check
+  // above: a healthy unit told it is faulty is worse than no check at all,
+  // because somebody acts on it.
   const env = { ...process.env, XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR ?? `/run/user/${process.getuid?.() ?? 1000}` }
   let kiosk = null
+  let kioskScope = null          // 'user' on a desktop image, 'system' on Lite
   try {
     kiosk = (await exec('systemctl', ['--user', 'is-active', 'reef-kiosk.service'], { env, timeout: 5000 })).stdout.trim()
+    kioskScope = 'user'
   } catch (err) {
     kiosk = err.stdout?.trim() || null
+    if (kiosk) kioskScope = 'user'
+  }
+  // Nothing on the user bus, or a bus that is not there at all: try the system
+  // one. A Lite unit has no user session until someone logs in, so the first
+  // call fails with no output rather than with an answer.
+  if (!kiosk || kiosk === 'inactive') {
+    const sysKiosk = await run('systemctl', ['is-active', 'reef-kiosk.service'])
+    if (sysKiosk) { kiosk = sysKiosk; kioskScope = 'system' }
   }
   // Whether the browser is running is not whether anything is on screen. A
   // truncated build leaves the kiosk happily rendering an empty page: systemd
@@ -208,7 +226,9 @@ async function services(repoRoot) {
     kiosk === 'active' ? 'ok' : kiosk ? 'fail' : 'unknown',
     kiosk ?? 'unknown',
     kiosk && kiosk !== 'active' ? 'The browser that draws the dashboard is not running - the screen is blank or frozen.' : null,
-    kiosk && kiosk !== 'active' ? 'Restart it: systemctl --user restart reef-kiosk.service' : null))
+    kiosk && kiosk !== 'active'
+      ? `Restart it: systemctl ${kioskScope === 'system' ? '' : '--user '}restart reef-kiosk.service`
+      : null))
   return out
 }
 

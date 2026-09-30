@@ -63,7 +63,7 @@ as_user .venv/bin/pip install -r requirements.txt
 echo "==> Allowing the server to manage Wi-Fi and restart services (wizard + OTA updates)"
 sudo tee /etc/sudoers.d/reef-terminal > /dev/null <<SUDOERS
 $RT_USER ALL=(root) NOPASSWD: /usr/bin/nmcli
-$RT_USER ALL=(root) NOPASSWD: /usr/bin/systemctl restart reef-server.service, /usr/bin/systemctl restart co2-daemon.service
+$RT_USER ALL=(root) NOPASSWD: /usr/bin/systemctl restart reef-server.service, /usr/bin/systemctl restart co2-daemon.service, /usr/bin/systemctl restart reef-kiosk.service
 SUDOERS
 sudo chmod 440 /etc/sudoers.d/reef-terminal
 sudo rm -f /etc/sudoers.d/reef-terminal-nmcli

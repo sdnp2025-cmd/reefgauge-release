@@ -98,12 +98,31 @@ export default async function systemRoutes(app, { config, state, db, support }) 
   const UNITS = {
     server: { scope: 'system', unit: 'reef-server.service' },
     sensor: { scope: 'system', unit: 'co2-daemon.service' },
-    display: { scope: 'user', unit: 'reef-kiosk.service' }
+    // The display's scope depends on the image, so it is decided at the moment
+    // of use rather than fixed here. On a desktop image the kiosk is a user
+    // service started with the session; on Lite it is a system service that
+    // owns tty1, because there is no session to start it from. Hardcoding
+    // 'user' meant "restart the display" - the single most useful thing in a
+    // support call about a blank screen - silently did nothing on every Lite
+    // unit.
+    display: { scope: null, unit: 'reef-kiosk.service' }
+  }
+
+  // Which bus owns the kiosk on THIS unit. A system unit file at a known path
+  // is the honest test; there is no user session to ask on a Lite unit that
+  // nobody has logged into.
+  function kioskScope() {
+    try {
+      return fs.existsSync('/etc/systemd/system/reef-kiosk.service') ? 'system' : 'user'
+    } catch {
+      return 'user'
+    }
   }
 
   app.post('/api/system/restart/:target', async (req, reply) => {
-    const target = UNITS[req.params.target]
-    if (!target) return reply.code(400).send({ error: `unknown service; expected one of ${Object.keys(UNITS).join(', ')}` })
+    const found = UNITS[req.params.target]
+    if (!found) return reply.code(400).send({ error: `unknown service; expected one of ${Object.keys(UNITS).join(', ')}` })
+    const target = { ...found, scope: found.scope ?? kioskScope() }
     const args = target.scope === 'user'
       ? ['--user', 'restart', target.unit]
       : ['restart', target.unit]
