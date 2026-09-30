@@ -4,7 +4,7 @@ The software each ReefGauge terminal runs. Units clone this repository and
 update from it; development happens in a private repository and lands here as
 releases.
 
-**Version 0.6.3**
+**Version 0.6.4**
 
 - `server/` — the terminal's own server: pollers for the Apex, Red Sea
   equipment and the weather, the alert engine, the chemistry log, diagnostics.
