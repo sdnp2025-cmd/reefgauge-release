@@ -110,8 +110,18 @@ verify_dashboard || rollback
 echo "==> Checking the dashboard renders"
 if command -v chromium >/dev/null 2>&1; then
   node scripts/check-render.mjs "http://127.0.0.1:${REEF_PORT:-8080}/" || rollback
+elif command -v chromium-browser >/dev/null 2>&1; then
+  CHROMIUM=chromium-browser node scripts/check-render.mjs "http://127.0.0.1:${REEF_PORT:-8080}/" || rollback
 else
-  echo "    (chromium not installed - skipped)"
+  # Not a footnote. This check is the only thing that catches a bundle which
+  # built cleanly and throws on first paint, and it was added because a brownout
+  # once shipped a zero-byte build that vite exited 0 on. A unit missing chromium
+  # is a unit whose display is also broken - the kiosk has nothing to run - so
+  # say both, loudly, rather than printing "skipped" and moving on.
+  echo "!! chromium is not installed on this unit."
+  echo "   The render check cannot run, so a broken dashboard would not be caught."
+  echo "   The kiosk has nothing to run either, so the screen is blank."
+  echo "   Fix: sudo apt-get install -y chromium   (then re-run pi/install.sh)"
 fi
 
 # Only now is the new build good; drop the snapshot and stop rolling back.

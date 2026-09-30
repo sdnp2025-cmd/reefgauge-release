@@ -31,6 +31,15 @@ packages:
   # The kiosk: a wlroots compositor that runs one fullscreen client and nothing
   # else. Lite has no compositor at all without it.
   - cage
+  # And something for it to run. Lite does not ship a browser; the desktop image
+  # does, which is why nothing installed it until now. Without it the kiosk
+  # restart-loops into a black screen, and the render check in update.sh - which
+  # exists because a brownout once shipped a zero-byte bundle - skips silently.
+  - chromium
+  # Lite ships almost no fonts. Lilita One is bundled with the app, but the body
+  # face falls back through faces that exist on macOS and Windows and not here.
+  - fonts-dejavu-core
+  - fonts-liberation2
   # The alarm is played with aplay (server/src/alarmSound.js) and Lite does not
   # ship it. Without this the product's only audible alarm is silent, and the
   # spawn failure is swallowed, so nothing reports it.

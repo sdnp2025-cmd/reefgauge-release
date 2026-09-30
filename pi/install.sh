@@ -186,7 +186,22 @@ echo "==> Installing the kiosk (Lite: cage on tty1)"
 # udisks2 because the USB backup flow looks for a mounted drive and Lite mounts
 # nothing on its own: without it, a stick physically in the port reads as
 # "no USB drive is plugged in".
-sudo apt-get install -y --no-install-recommends cage alsa-utils udisks2
+# chromium, because Lite does not ship it and the desktop image does - which is
+# why install.sh never installed it. Without it cage starts, kiosk.sh finds no
+# browser and exits, systemd restarts the pair until the limit latches it off,
+# and the customer has a black screen. It also disables the render check in
+# scripts/update.sh, which skips silently when chromium is absent - so the net
+# that exists because a brownout once shipped a zero-byte bundle would be
+# quietly gone on every unit built this way.
+#
+# Fonts because Lite ships almost none. Lilita One is bundled with the app, but
+# the body face falls back through -apple-system / Segoe UI / Roboto / Helvetica
+# Neue, and none of those exist here - leaving the dashboard to whatever generic
+# sans-serif is present, which on a minimal image may be nothing at all.
+sudo apt-get install -y --no-install-recommends \
+  cage chromium alsa-utils udisks2 fonts-dejavu-core fonts-liberation2 \
+  || sudo apt-get install -y --no-install-recommends \
+       cage chromium-browser alsa-utils udisks2 fonts-dejavu-core
 
 sed -e "s|__USER__|$RT_USER|g" -e "s|__HOME__|$RT_HOME|g" \
   "$REPO_DIR/pi/reef-kiosk-cage.service" \
