@@ -1,5 +1,12 @@
 node_modules/
 dist/
+# ...except the puck's firmware, which is a build artefact we deliberately ship:
+# it is the only route an update has into a device screwed into a cabinet, so it
+# has to be in the release repository that terminals clone from. The bare
+# `dist/` above was written for web/dist and matches any directory of that name
+# anywhere, which silently swallowed this one - `git add -A` reported nothing.
+!firmware/dist/
+!firmware/dist/**
 data/
 server/config.json
 __pycache__/
