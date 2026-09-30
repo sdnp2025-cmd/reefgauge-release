@@ -1,7 +1,13 @@
 {
+  "esp32": {
+    "version": "925fd5e",
+    "sha256": "83755e1db70773f6aefd9c987174f708ee6a4ce9c32f96a97f8b2914a9a18ca5",
+    "size": 1022336,
+    "file": "puck-esp32.bin"
+  },
   "esp32s3": {
-    "version": "6ce4241",
-    "sha256": "744fc1e1eef0a07c386c1d166f83132b9696b27685d15642b9eeb4b144b973c0",
+    "version": "925fd5e",
+    "sha256": "9462d851b8ffb5084ecd416547bb934d1ca2d397c8e9d661fb824f8b57d8a501",
     "size": 1014224,
     "file": "puck-esp32s3.bin"
   }
