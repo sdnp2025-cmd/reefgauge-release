@@ -139,6 +139,39 @@ export default async function apiRoutes(app, { config, state, db }) {
     error: state.tank.error
   }))
 
+  // ---- Puck firmware, held for the puck to come and fetch ----
+  //
+  // The puck has no inbound server, deliberately, so the terminal cannot push
+  // an update to it. It holds the image and mentions it in the reply to a
+  // reading; the puck decides, fetches and applies. See firmware/puck/ota.h.
+  //
+  // Images live in firmware/dist/, one per chip, beside a manifest naming the
+  // version, size and SHA-256 of each. The digest is the whole of the integrity
+  // story on the puck's side, so it is read from the manifest and never
+  // recomputed here - if the two ever disagree, the puck refuses the image,
+  // which is the correct outcome.
+  const firmwareDir = path.resolve(config.serverRoot, '../firmware/dist')
+
+  function puckFirmware(chip) {
+    if (!chip || !/^[a-z0-9]+$/.test(chip)) return null
+    try {
+      const manifest = JSON.parse(fs.readFileSync(path.join(firmwareDir, 'puck.json'), 'utf8'))
+      const entry = manifest[chip]
+      if (!entry?.version || !entry?.sha256 || !entry?.file) return null
+      const file = path.join(firmwareDir, path.basename(entry.file))
+      if (!fs.existsSync(file)) return null
+      return { ...entry, file }
+    } catch {
+      return null   // no firmware staged on this unit; that is normal
+    }
+  }
+
+  app.get('/api/puck/firmware', async (req, reply) => {
+    const fw = puckFirmware(req.query?.chip)
+    if (!fw) return reply.code(404).send({ error: 'no puck firmware for that chip' })
+    return reply.type('application/octet-stream').send(fs.createReadStream(fw.file))
+  })
+
   // ---- Which Apex input is which reading ----
   //
   // Setup maps these automatically, by the Apex's own input type first and a
@@ -228,7 +261,7 @@ export default async function apiRoutes(app, { config, state, db }) {
   const LOCATIONS = new Set(['display', 'cabinet'])
 
   app.post('/api/environment', async (req, reply) => {
-    const { co2_ppm, temp_c, humidity_pct, source, frcAck } = req.body ?? {}
+    const { co2_ppm, temp_c, humidity_pct, source, frcAck, chip, fw } = req.body ?? {}
     if (co2_ppm == null && temp_c == null && humidity_pct == null) {
       return reply.code(400).send({ error: 'empty reading' })
     }
@@ -277,7 +310,20 @@ export default async function apiRoutes(app, { config, state, db }) {
       location,
       config: {
         tempOffsetC: currentOffset(location),
-        frc: frcRequestFor(location)
+        frc: frcRequestFor(location),
+        // Offered only when it is a different build from the one reporting.
+        // "Different", not "newer": the version is a git sha with no ordering,
+        // and different-from-what-is-running is the question that matters -
+        // which also makes a deliberate downgrade work with no special case.
+        ...(() => {
+          const available = puckFirmware(chip)
+          if (!available || !fw || available.version === fw) return {}
+          return { update: {
+            version: available.version,
+            sha256: available.sha256,
+            size: available.size ?? null
+          } }
+        })()
       }
     }
   })
