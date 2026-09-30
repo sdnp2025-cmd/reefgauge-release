@@ -491,17 +491,20 @@ export default async function apiRoutes(app, { config, state, db }) {
     const changes = []
     const skipped = []
     for (const location of targets) {
-      const latest = location === 'cabinet' ? state.env?.cabinet?.temp_c : state.environment?.temp_c
-      if (latest == null) {
-        skipped.push({ location, reason: 'it has not reported a reading yet' })
-        continue
-      }
-
+      // Judged entirely on the stored readings, not on what happens to be in
+      // memory. The server keeps the latest reading in memory and loses it on
+      // restart, so calibrating within a minute of an update refused with "it
+      // has not reported a reading yet" - about a sensor that had been
+      // reporting for hours, with ten minutes of it in the database. The window
+      // below answers both questions at once: enough samples means the sensor
+      // is alive, and their spread means it has settled.
       const temps = recentTemps(location)
       if (temps.length < MIN_SAMPLES) {
         skipped.push({ location,
-          reason: `only ${temps.length} reading(s) in the last ten minutes - `
-            + 'wait for a few more so this is not calibrated against one sample' })
+          reason: temps.length === 0
+            ? 'it has not reported in the last ten minutes - check it is powered and connected'
+            : `only ${temps.length} reading(s) in the last ten minutes - wait for a few more, `
+              + 'so this is not calibrated against a single sample' })
         continue
       }
       const spread = Math.max(...temps) - Math.min(...temps)
