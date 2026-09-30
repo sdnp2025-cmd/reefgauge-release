@@ -1,8 +1,8 @@
 {
   "esp32s3": {
-    "version": "e913364",
-    "sha256": "82c6ca97d6c73b5c6ce214504bd142452712624c919741c3a614ec1052a4e698",
-    "size": 1013744,
+    "version": "4c9b7d0",
+    "sha256": "a8c575e5fcc52b8c3cfcef61fdf15788435f3959e128c70109b427e2480883b4",
+    "size": 1014288,
     "file": "puck-esp32s3.bin"
   }
 }
