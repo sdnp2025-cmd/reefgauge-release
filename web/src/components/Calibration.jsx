@@ -111,13 +111,21 @@ export default function Calibration() {
     // Say what moved, per sensor. "Saved" is not useful feedback for something
     // whose whole purpose is that a number on the wall changes.
     const settled = show(referenceF)
+    // A sensor that was skipped is the interesting outcome, not a footnote -
+    // the customer tapped a button and that sensor did not change.
+    if (!res.sensors.length) {
+      setSaid(null)
+      setError(res.skipped.map((k) => `${NAME[k.location]}: ${k.reason}`).join(' — '))
+      return
+    }
     setSaid(res.sensors.map((s) => (
       `${NAME[s.location]} was reading ${show(asF(s.measuredC))} °F`
+      + (s.samples ? ` (median of ${s.samples})` : '')
     )).join(' · ')
       // The sensors re-read the offset on their own cycle, so the number on the
       // wall does not change on this tap. Saying so stops it looking broken.
       + `. Both will settle to about ${settled} °F within a minute.`.replace('Both', res.sensors.length > 1 ? 'Both' : 'It')
-      + (res.skipped.length ? ` (${res.skipped.map((k) => `${NAME[k.location]} skipped — ${k.reason}`).join('; ')})` : ''))
+      + (res.skipped.length ? ` — ${res.skipped.map((k) => `${NAME[k.location]} was not changed: ${k.reason}`).join('; ')}` : ''))
   }
 
   const recalibrate = async (location, ppm, label) => {

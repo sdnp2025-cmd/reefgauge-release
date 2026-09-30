@@ -459,14 +459,60 @@ export default async function apiRoutes(app, { config, state, db }) {
     // A half-applied calibration leaves two sensors disagreeing differently
     // than they did before, which is harder to reason about than not having
     // started.
+    // What the sensor is reading, from several samples rather than whichever one
+    // happened to be latest.
+    //
+    // This took a single instantaneous value, and a single value is exactly
+    // what should not be trusted here. The reading spikes - a sensor that sat
+    // at 72 F produced 77.5 and 79.1 within the same minute - and a calibration
+    // catching one writes that spike into a persistent offset, so a sensor that
+    // was correct ends up several degrees wrong until somebody notices. It also
+    // compounds: the offset is applied to the chip, which restarts measurement,
+    // and the next few readings are in flux - so calibrating twice in quick
+    // succession multiplies the error rather than correcting it. Watched all of
+    // that happen on the bench.
+    //
+    // The median of a short window is immune to a lone spike, and the spread
+    // across that window says whether the sensor has settled at all.
+    const SETTLE_WINDOW_MS = 10 * 60 * 1000
+    const MIN_SAMPLES = 3
+    const MAX_SPREAD_C = 1.5        // ~2.7 F; wider than drift, narrower than a spike
+
+    function recentTemps(location) {
+      const rows = db.prepare(
+        `SELECT temp_c FROM env_readings
+         WHERE ts >= ? AND temp_c IS NOT NULL
+           AND (location = ? OR (? = 'display' AND location IS NULL))
+         ORDER BY ts DESC LIMIT 20`
+      ).all(Date.now() - SETTLE_WINDOW_MS, location, location)
+      return rows.map((r) => r.temp_c)
+    }
+
     const changes = []
     const skipped = []
     for (const location of targets) {
-      const measured = location === 'cabinet' ? state.env?.cabinet?.temp_c : state.environment?.temp_c
-      if (measured == null) {
+      const latest = location === 'cabinet' ? state.env?.cabinet?.temp_c : state.environment?.temp_c
+      if (latest == null) {
         skipped.push({ location, reason: 'it has not reported a reading yet' })
         continue
       }
+
+      const temps = recentTemps(location)
+      if (temps.length < MIN_SAMPLES) {
+        skipped.push({ location,
+          reason: `only ${temps.length} reading(s) in the last ten minutes - `
+            + 'wait for a few more so this is not calibrated against one sample' })
+        continue
+      }
+      const spread = Math.max(...temps) - Math.min(...temps)
+      if (spread > MAX_SPREAD_C) {
+        skipped.push({ location,
+          reason: `still settling - its readings have moved ${(spread * 9 / 5).toFixed(1)} F `
+            + 'in the last ten minutes. Calibrating now would store that movement as a correction.' })
+        continue
+      }
+      const sorted = [...temps].sort((a, b) => a - b)
+      const measured = sorted[Math.floor(sorted.length / 2)]
       const current = currentOffset(location)
       const next = Math.round((current + (measured - reference)) * 100) / 100
       if (next < 0 || next > MAX_OFFSET_C) {
@@ -477,7 +523,8 @@ export default async function apiRoutes(app, { config, state, db }) {
             + `(it reads ${measured.toFixed(1)} C) - check the temperature you gave`
         })
       }
-      changes.push({ location, key: OFFSET_KEY[location], current, next, measured })
+      changes.push({ location, key: OFFSET_KEY[location], current, next, measured,
+                     samples: temps.length, spreadC: Math.round(spread * 100) / 100 })
     }
 
     if (!changes.length) {
@@ -509,8 +556,11 @@ export default async function apiRoutes(app, { config, state, db }) {
       ...(changes[0].location === 'display'
         ? { tempOffsetC: changes[0].next, previousOffsetC: changes[0].current, measuredC: changes[0].measured }
         : {}),
-      sensors: changes.map(({ location, current, next, measured }) => ({
-        location, offsetC: next, previousOffsetC: current, measuredC: measured
+      sensors: changes.map(({ location, current, next, measured, samples, spreadC }) => ({
+        location, offsetC: next, previousOffsetC: current, measuredC: measured,
+        // What it was actually calibrated against, so an unexpected offset can
+        // be explained rather than guessed at.
+        samples, spreadC
       })),
       skipped
     }
