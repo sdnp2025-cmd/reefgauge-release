@@ -127,7 +127,14 @@ elif sudo -n "$REPO_DIR/pi/mdns-service.sh" 2>/dev/null; then
 elif bash "$REPO_DIR/pi/mdns-service.sh" 2>/dev/null; then
   :   # already root, or the file is already correct and it exits 0
 else
-  echo "    (needs a re-run of pi/install.sh on this unit to gain permission)"
+  # Name the command. "needs a re-run of install.sh" is true and useless at
+  # 3am: the grant for this script arrives WITH install.sh, so a unit whose
+  # sudoers predates it cannot install the advertisement from an update and
+  # has no way to find that out except by reading this line.
+  echo "    could not write the mDNS advertisement - this unit's sudoers predates it."
+  echo "    The CO2 puck finds its terminal by that advertisement, so until this"
+  echo "    is done a puck will fall back to resolving the hostname. To fix, once:"
+  echo "        sudo bash $REPO_DIR/pi/install.sh"
 fi
 
 echo "==> Restarting services"
