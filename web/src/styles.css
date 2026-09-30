@@ -3331,3 +3331,18 @@ body {
    thing it said rather than what it is saying. */
 .cal-sensor.stale { opacity: 0.55; border-style: dashed; }
 .cal-stale { color: var(--warn); font-weight: 700; }
+
+/* ---- Cabinet section in the air view ------------------------------------- */
+.env-section {
+  display: flex; align-items: baseline; gap: 1vw;
+  margin-top: 2vh; font-size: 2.1vh; font-weight: 800;
+}
+.env-section em {
+  font-style: normal; font-size: 1.7vh; font-weight: 600; color: var(--muted);
+}
+/* An explanation, not an alarm: the tank is fine, the cabinet needs air. */
+.env-note {
+  margin-top: 1.2vh; padding: 1.2vh 1.2vw; border-radius: 1vh;
+  font-size: 1.8vh; line-height: 1.45; color: var(--ink-2);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+}

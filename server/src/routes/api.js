@@ -361,9 +361,26 @@ export default async function apiRoutes(app, { config, state, db }) {
   app.get('/api/environment/history', async (req) => {
     const hours = Math.min(Number(req.query.hours ?? 24), 24 * 90)
     const cutoff = Date.now() - hours * 3600 * 1000
-    return {
-      readings: db.prepare('SELECT ts, co2_ppm, temp_c, humidity_pct FROM env_readings WHERE ts >= ? ORDER BY ts').all(cutoff)
-    }
+    // By location, and 'display' by default.
+    //
+    // This had no location filter, and once the puck started reporting it
+    // returned both sensors interleaved, ordered by time - so the 24-hour CO2
+    // line on the home card was drawing the room and the cabinet as one series,
+    // zigzagging between them every thirty seconds. It looked like violent
+    // swings in a room that was actually steady.
+    //
+    // 'display' is the default because that is what every existing caller
+    // wants, and what the endpoint used to return before a second sensor
+    // existed at all. Rows written before the location column are display rows,
+    // so they are included.
+    const location = LOCATIONS.has(req.query?.location) ? req.query.location : 'display'
+    const readings = location === 'display'
+      ? db.prepare(`SELECT ts, co2_ppm, temp_c, humidity_pct FROM env_readings
+                    WHERE ts >= ? AND (location = 'display' OR location IS NULL)
+                    ORDER BY ts`).all(cutoff)
+      : db.prepare(`SELECT ts, co2_ppm, temp_c, humidity_pct FROM env_readings
+                    WHERE ts >= ? AND location = ? ORDER BY ts`).all(cutoff, location)
+    return { location, readings }
   })
 
   // ---- Room-temperature calibration ----
