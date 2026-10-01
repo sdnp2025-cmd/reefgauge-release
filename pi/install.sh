@@ -218,7 +218,20 @@ sed -e "s|__USER__|$RT_USER|g" -e "s|__HOME__|$RT_HOME|g" \
   "$REPO_DIR/pi/reef-kiosk-cage.service" \
   | sudo tee /etc/systemd/system/reef-kiosk.service > /dev/null
 sudo systemctl daemon-reload
-# The login prompt and the kiosk cannot both own tty1.
+# The login prompt and the kiosk cannot both own tty1, and disabling getty is not
+# enough to settle it: systemd-getty-generator re-adds getty@tty1 on every boot,
+# so a merely disabled unit comes back. The kiosk declares Conflicts= on it, and
+# systemd then resolves the clash by starting one or the other - which one is not
+# stable. Installing the boot splash added After=plymouth-quit-wait.service to
+# the kiosk, and that delay was enough for getty to take tty1 first and leave the
+# panel sitting at a login prompt, with no kiosk journal entries at all because
+# it was never attempted.
+#
+# Masking is what survives the generator. Nothing is lost: the kiosk owns the
+# screen, and a shipped unit's password is locked, so a console login on tty1
+# could not be used anyway.
+sudo systemctl mask getty@tty1.service 2>/dev/null || true
+sudo systemctl mask autovt@tty1.service 2>/dev/null || true
 sudo systemctl disable --now getty@tty1.service 2>/dev/null || true
 sudo systemctl enable reef-kiosk.service
 echo "    kiosk starts on tty1 at boot"
