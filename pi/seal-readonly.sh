@@ -234,7 +234,17 @@ fi
 
 say "Done"
 cat <<'NEXT'
-    Reboot, then check:
+    DO NOT REBOOT THIS UNIT IF IT IS A GOLDEN-IMAGE BUILD.
+
+    The next boot runs reefgauge-expand-data.service, which grows /data across
+    the whole card and stamps /data/.expanded. That makes the captured image the
+    size of the card instead of ~15 GiB, and - because the stamp is on /data and
+    travels with it - stops every card written from that image from ever
+    expanding. scripts/build-golden-image.sh powers the unit off for exactly this
+    reason and never reboots it.
+
+    The checks below are for a unit you are sealing BY HAND and intend to keep,
+    not for one about to be imaged:
 
       findmnt -no OPTIONS /          # starts with ro
       touch /etc/x                   # must fail: Read-only file system

@@ -36,31 +36,67 @@ manage_etc_hosts: true
 # bootcmd runs on EVERY boot, including on a sealed read-only unit.
 bootcmd:
   - |
+    # Grow the root partition to a fixed size, early, before the package install.
+    #
+    # Logs to the FAT boot partition on purpose: it is the only filesystem this
+    # project can read from a Mac without the Pi running, and when this step goes
+    # wrong the symptom is a unit that cannot be reached at all. The first version
+    # of this sent parted's output to /dev/null and swallowed its exit status, so
+    # when it failed the evidence was a half-built card and nothing else.
     set -u
+    LOG=/boot/firmware/reefgauge-grow.log
     TARGET_MIB=7168
     DISK=/dev/mmcblk0
     PART=/dev/mmcblk0p2
+    say() { echo "$(date -u +%FT%TZ 2>/dev/null) reefgauge-grow: $*" | tee -a "$LOG" 2>/dev/null || true; }
+
     [ -b "$PART" ] || exit 0
-    cur=$(blockdev --getsize64 "$PART" 2>/dev/null) || exit 0
-    tgt=$((TARGET_MIB * 1048576))
-    # Already big enough - the shipped-unit case, and the only case that matters
-    # for how often this runs. Leave immediately.
+    cur=$(blockdev --getsize64 "$PART" 2>/dev/null || echo 0)
+    tgt=$(( TARGET_MIB * 1048576 ))
+
+    # Already this size: the shipped-unit case, and the common one, since bootcmd
+    # runs on every boot. Leave without writing anything.
     [ "$cur" -ge "$tgt" ] && exit 0
-    # Refuse on a read-only root: that is a sealed unit, and resizing one is
-    # never right. Cheaper and more honest than parsing mount options.
-    touch /.reefgauge-rw-probe 2>/dev/null || exit 0
+
+    # A read-only root is a sealed unit, and resizing one is never right.
+    if ! touch /.reefgauge-rw-probe 2>/dev/null; then
+      say "root is read-only - not resizing"; exit 0
+    fi
     rm -f /.reefgauge-rw-probe
-    # parted cannot make the kernel re-read a table while / is mounted from it,
-    # so it warns and we update the in-kernel view ourselves. Both are allowed
-    # to fail: if the partition did not actually grow we do not touch the
-    # filesystem, which is the only step that could lose data.
-    parted -s "$DISK" resizepart 2 "${TARGET_MIB}MiB" >/dev/null 2>&1 || true
-    partx -u "$DISK" >/dev/null 2>&1 || partprobe "$DISK" >/dev/null 2>&1 || true
-    new=$(blockdev --getsize64 "$PART" 2>/dev/null) || exit 0
-    [ "$new" -gt "$cur" ] || exit 0
-    resize2fs "$PART" >/dev/null 2>&1 || true
 
+    say "root partition is $(( cur / 1048576 )) MiB, growing to ${TARGET_MIB} MiB"
 
+    # sfdisk, not parted. parted refuses to resize a partition that is in use,
+    # and / is in use by definition here - it is the filesystem this is running
+    # from. sfdisk --no-reread writes the table anyway and partx -u updates the
+    # kernel's view through BLKPG, which is what growpart does for the same
+    # reason. parted is kept only as a fallback.
+    grown=0
+    if echo ",${TARGET_MIB}M" | sfdisk --no-reread --force -N 2 "$DISK" >> "$LOG" 2>&1; then
+      grown=1
+    else
+      say "sfdisk failed, trying parted"
+      parted -s "$DISK" resizepart 2 "${TARGET_MIB}MiB" >> "$LOG" 2>&1 && grown=1
+    fi
+
+    if [ "$grown" -ne 1 ]; then
+      say "COULD NOT GROW THE PARTITION - root stays $(( cur / 1048576 )) MiB and the install will not fit"
+      exit 0
+    fi
+
+    partx -u "$DISK" >> "$LOG" 2>&1 || partprobe "$DISK" >> "$LOG" 2>&1 || true
+    new=$(blockdev --getsize64 "$PART" 2>/dev/null || echo 0)
+    say "partition is now $(( new / 1048576 )) MiB"
+    if [ "$new" -le "$cur" ]; then
+      say "the kernel did not pick up the new size - not touching the filesystem"
+      exit 0
+    fi
+
+    if resize2fs "$PART" >> "$LOG" 2>&1; then
+      say "filesystem grown to $(df -h / 2>/dev/null | awk 'NR==2 {print $2}')"
+    else
+      say "resize2fs FAILED - the partition grew but the filesystem did not"
+    fi
 packages:
   # The terminal advertises itself as _reefgauge._tcp so the CO2 puck can find
   # it by service rather than by name — every unit ships with the same hostname
@@ -145,5 +181,48 @@ runcmd:
   - [ sh, -c, "for g in i2c gpio spi render input video; do adduser pi $g 2>/dev/null || true; done" ]
 
   # SSH for the build only. Removed from shipped units by the factory step.
-  - [ systemctl, enable, ssh ]
-  - [ systemctl, start, ssh ]
+  #
+  # Written as a script rather than two systemctl calls because getting this
+  # wrong is unrecoverable: the password is locked by design, so a unit whose
+  # sshd does not work has no way in at all, and the only channel left is this
+  # file on the FAT partition - the one filesystem a Mac can read with the Pi
+  # powered off. Everything below is harmless on a unit where sshd is fine.
+  - |
+    DIAG=/boot/firmware/reefgauge-ssh.log
+    { echo "=== $(date -u +%FT%TZ 2>/dev/null) reefgauge ssh setup ==="
+
+      # Pi OS ships no host keys and cloud-init's ssh module deletes and
+      # regenerates them. If that did not happen, or happened while the disk was
+      # full, sshd has nothing to present: it accepts the TCP connection and
+      # closes it before any banner, which looks exactly like a network fault.
+      echo "--- host keys before ---"; ls -l /etc/ssh/ssh_host_* 2>&1
+      ssh-keygen -A 2>&1
+      echo "--- host keys after ssh-keygen -A ---"; ls -l /etc/ssh/ssh_host_* 2>&1
+
+      # Debian 13 ships both ssh.service and ssh.socket. If the socket owns port
+      # 22, systemd accepts connections and spawns a per-connection sshd that
+      # fails - the same accept-then-reset signature. One of the two has to own
+      # the port, and for an appliance the long-running service is the simpler
+      # choice.
+      echo "--- units before ---"
+      for u in ssh.service ssh.socket; do
+        echo "$u enabled=$(systemctl is-enabled $u 2>&1) active=$(systemctl is-active $u 2>&1)"
+      done
+      if systemctl is-active --quiet ssh.socket; then
+        echo "--- ssh.socket owns :22, handing it to ssh.service ---"
+        systemctl disable --now ssh.socket 2>&1
+      fi
+      systemctl enable ssh.service 2>&1
+      systemctl restart ssh.service 2>&1
+
+      echo "--- sshd config test ---"; /usr/sbin/sshd -t 2>&1
+      echo "--- units after ---"
+      for u in ssh.service ssh.socket; do
+        echo "$u enabled=$(systemctl is-enabled $u 2>&1) active=$(systemctl is-active $u 2>&1)"
+      done
+      echo "--- listening on 22? ---"; ss -lntp 2>&1 | grep -E ':22|State' || echo "nothing on 22"
+      echo "--- ssh journal ---"; journalctl -u ssh.service -b --no-pager 2>&1 | tail -25
+      echo "--- authorized_keys ---"; ls -l /home/pi/.ssh/ 2>&1; wc -l /home/pi/.ssh/authorized_keys 2>&1
+      echo "--- disk + cloud-init ---"; df -h / 2>&1; cloud-init status --long 2>&1
+      echo "=== end ==="
+    } >> "$DIAG" 2>&1
