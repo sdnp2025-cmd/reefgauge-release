@@ -668,6 +668,15 @@ async function connectWifi(ssid, password) {
           + `(${err.message})`
       })
     }
+    // Tell the truth for the 800ms this process has left.
+    //
+    // `config` is what /api/setup/status reads, and it was never updated here, so
+    // the outgoing server kept answering setupComplete: false while the file on
+    // disk said otherwise. Anything that reloaded in that window was handed the
+    // wizard again. The keys in `next` all come from the config file, so the
+    // derived ones this object also carries are untouched.
+    Object.assign(config, next)
+
     // systemd (Restart=always) brings the server back up with the new config
     setTimeout(() => process.exit(0), 800)
     return { ok: true, restarting: true }

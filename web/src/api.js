@@ -47,6 +47,28 @@ export async function waitForServer({ timeoutMs = 30000, pollMs = 400 } = {}) {
   return false
 }
 
+// Wait for the server to report setup complete, not merely to answer.
+//
+// waitForServer returns on the first 200 from /api/health, and after
+// /api/setup/complete the OLD process is still alive for 800ms - long enough to
+// answer that poll. The page then reloaded against the outgoing server, which
+// still said setupComplete: false, and the customer landed back on the welcome
+// screen having just finished the wizard. Nothing reloaded again, so it stayed
+// there, which reads as a setup loop.
+//
+// The state we are waiting for is the state to poll for.
+export async function waitForSetupComplete({ timeoutMs = 60000, pollMs = 400 } = {}) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch('/api/setup/status', { cache: 'no-store' })
+      if (res.ok && (await res.json())?.complete) return true
+    } catch { /* restarting - expected */ }
+    await new Promise((r) => setTimeout(r, pollMs))
+  }
+  return false
+}
+
 export async function api(path, options = {}) {
   const res = await fetch(path, { ...options, headers: { ...authHeaders(), ...(options.headers ?? {}) } })
   if (!res.ok) {

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { api, waitForServer } from '../api.js'
+import { api, waitForSetupComplete } from '../api.js'
 import OnScreenKeyboard from './OnScreenKeyboard.jsx'
 import UpdatePanel from './UpdatePanel.jsx'
 
@@ -241,7 +241,7 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(answers)
     })
-    await waitForServer()
+    await waitForSetupComplete()
     window.location.replace('/')
   })
 
@@ -264,7 +264,7 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
       // Saving restarts the server. Wait for it to answer again before
       // reloading — a page that loads into the gap gets a failed fetch for
       // every card and draws "not set up" over settings that are set.
-      .then(() => waitForServer())
+      .then(() => waitForSetupComplete())
       .then(() => window.location.replace('/?settings=1'))
       .catch((err) => { setFinishing(false); setError(String(err.message ?? err)) })
   }, [savePending]) // eslint-disable-line react-hooks/exhaustive-deps
