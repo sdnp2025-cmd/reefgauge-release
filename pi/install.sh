@@ -84,6 +84,13 @@ sudo install -d -m 755 /opt/reefgauge
 for script in install.sh install-splash.sh mdns-service.sh kiosk.sh expand-data.sh; do
   [ -f "$REPO_DIR/pi/$script" ] && sudo install -m 755 "$REPO_DIR/pi/$script" "/opt/reefgauge/$script"
 done
+# The splash theme travels with its installer. Without this the script lands in
+# /opt and its assets do not, so it fails on a glob that matches nothing -
+# which is what moving the privileged scripts here quietly broke.
+if [ -d "$REPO_DIR/pi/plymouth/reefgauge" ]; then
+  sudo install -d /opt/reefgauge/plymouth/reefgauge
+  sudo install -m 644 "$REPO_DIR"/pi/plymouth/reefgauge/* /opt/reefgauge/plymouth/reefgauge/
+fi
 
 sudo tee /etc/sudoers.d/reef-terminal-ops > /dev/null <<SUDOERS
 $RT_USER ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/sbin/reboot, /opt/reefgauge/install-splash.sh, /opt/reefgauge/install.sh, /opt/reefgauge/mdns-service.sh, /usr/bin/systemctl daemon-reload
