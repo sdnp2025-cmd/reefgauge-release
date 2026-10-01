@@ -164,6 +164,32 @@ async function storage(dataDir) {
 // any other single line in a support call.
 async function services(repoRoot) {
   const out = []
+
+  // Anything systemd could not start, not just ours.
+  //
+  // The checks below cover the units this product installs, so a unit could
+  // report "everything healthy" while showing the customer a screen of red
+  // [FAILED] lines on every boot - systemd abandons the splash and shows the
+  // message scroll whenever any unit fails, so this is the first thing a buyer
+  // sees. It is also the thing a support operator cannot otherwise reach: the
+  // log endpoint only serves this project's two units.
+  //
+  // On a sealed unit the usual cause is something writing under /var/lib, which
+  // the read-only root refuses, so the remedy is named here.
+  const failed = await run('systemctl', ['--failed', '--no-legend', '--plain', '--no-pager'])
+  const names = (failed ?? '')
+    .split('\n')
+    .map((l) => l.trim().split(/\s+/)[0])
+    .filter((n) => n && n.endsWith('.service'))
+  out.push(check('svc:failed', 'System services',
+    names.length === 0 ? 'ok' : 'fail',
+    names.length === 0 ? 'none failed' : `${names.length} failed: ${names.join(', ')}`,
+    names.length ? 'systemd could not start these. Boot shows them in red, and the '
+                 + 'ReefGauge splash is replaced by the message scroll.' : null,
+    names.length ? 'On a sealed unit this is normally a service writing under '
+                 + '/var/lib, which the read-only root refuses. `systemctl status '
+                 + '<unit>` names the path.' : null))
+
   const system = [['reef-server.service', 'Terminal server'], ['co2-daemon.service', 'Room-air sensor daemon']]
   for (const [unit, label] of system) {
     const active = await run('systemctl', ['is-active', unit])

@@ -276,12 +276,22 @@ export default async function systemRoutes(app, { config, state, db, support }) 
 
   app.get('/api/system/logs', async (req, reply) => {
     const units = { server: 'reef-server.service', sensor: 'co2-daemon.service' }
+    // 'boot' is this boot's warnings and errors from every unit, not just ours.
+    //
+    // Without it a support operator cannot see why a unit shows red [FAILED]
+    // lines at startup: the only logs reachable were this project's own two
+    // services, which are usually the ones working. Still read-only, still the
+    // journal, and -p warning keeps it to what is worth reading.
     const unit = units[req.query?.unit ?? 'server']
-    if (!unit) return reply.code(400).send({ error: `unknown unit; expected one of ${Object.keys(units).join(', ')}` })
+    const boot = (req.query?.unit ?? '') === 'boot'
+    if (!unit && !boot) return reply.code(400).send({ error: `unknown unit; expected one of ${Object.keys(units).join(', ')}, boot` })
     const lines = Math.min(Number(req.query?.lines ?? 100) || 100, 1000)
     try {
-      const { stdout } = await exec('journalctl', ['-u', unit, '-n', String(lines), '--no-pager'], { timeout: 20000 })
-      return { unit, lines: stdout.split('\n') }
+      const args = boot
+        ? ['-b', '-p', 'warning', '-n', String(lines), '--no-pager']
+        : ['-u', unit, '-n', String(lines), '--no-pager']
+      const { stdout } = await exec('journalctl', args, { timeout: 20000 })
+      return { unit: boot ? 'boot' : unit, lines: stdout.split('\n') }
     } catch (err) {
       return reply.code(500).send({ error: `could not read the log: ${err.message}` })
     }
