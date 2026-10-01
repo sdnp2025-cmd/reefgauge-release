@@ -205,7 +205,11 @@ export default function HomeCards({ onOpen }) {
               {keys.map((k) => <Ring key={k} pkey={k} p={params[k]} crit={critical.includes(params[k])} series={series[k]} />)}
             </div>
           ) : (
-            <div className="hc-muted">Waiting for Apex…</div>
+            <div className="hc-muted">
+              {tank?.apexConfigured === false
+                ? 'No controller connected \u2014 add one in Settings'
+                : 'Waiting for Apex\u2026'}
+            </div>
           )}
         </div>
       </button>

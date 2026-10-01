@@ -118,7 +118,18 @@ export default async function apiRoutes(app, { config, state, db }) {
         ...PARAM_META[key]
       }
     }
-    return { params, name: config.tankName ?? 'Reef Tank', updatedAt: state.tank.updatedAt, error: state.tank.error, feedUntil: state.tank.feedUntil ?? null }
+    // Whether a controller is configured at all - a different question from
+    // whether a reading has arrived yet. Without it the home screen said
+    // "Waiting for Apex..." to a customer who skipped the Apex step, or who
+    // does not own one: waiting, in perpetuity, for something never coming.
+    return {
+      params,
+      apexConfigured: Boolean(config.apex?.host),
+      name: config.tankName ?? 'Reef Tank',
+      updatedAt: state.tank.updatedAt,
+      error: state.tank.error,
+      feedUntil: state.tank.feedUntil ?? null
+    }
   })
 
   app.get('/api/tank/history', async (req) => {
