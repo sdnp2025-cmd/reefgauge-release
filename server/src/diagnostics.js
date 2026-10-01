@@ -82,15 +82,27 @@ async function thermal() {
 // ---- storage and memory -----------------------------------------------------
 async function storage(dataDir) {
   const out = []
-  const df = await run('df', ['-Pk', '/'])
+  // The partition that holds the data directory, not "/".
+  //
+  // On a sealed unit "/" is read-only and a fixed 7 GiB, so its usage is a
+  // constant: it would have sat at the same percentage for the life of the
+  // product, warning at 80% about a partition nothing can write to, while the
+  // one that actually fills went unmeasured. The database is bounded by the
+  // 90-day retention in db.js; photos and coral images are not.
+  //
+  // On a development checkout the data directory is under "/" anyway, so this is
+  // the same answer it always gave there.
+  const target = dataDir || '/'
+  const df = await run('df', ['-Pk', target])
   if (df) {
     const [, size, used, , pct] = df.split('\n')[1].split(/\s+/)
     const freeGb = (Number(size) - Number(used)) / 1024 / 1024
+    const totalGb = Number(size) / 1024 / 1024
     const usedPct = Number(String(pct).replace('%', ''))
     out.push(check('disk', 'Disk space', usedPct >= 92 ? 'fail' : usedPct >= 80 ? 'warn' : 'ok',
-      `${freeGb.toFixed(1)} GB free (${usedPct}% used)`,
+      `${freeGb.toFixed(1)} GB free of ${totalGb.toFixed(1)} GB (${usedPct}% used)`,
       usedPct >= 80 ? 'A full SD card corrupts on the next power cut.' : null,
-      usedPct >= 80 ? 'Clear old photos and coral images, or re-image onto a larger card.' : null))
+      usedPct >= 80 ? 'Clear old photos and coral images, or restore onto a larger card.' : null))
   } else out.push(check('disk', 'Disk space', 'unknown', null, 'df unavailable'))
 
   const totalMb = os.totalmem() / 1048576

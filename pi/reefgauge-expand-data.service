@@ -19,7 +19,11 @@ ConditionPathExists=!/data/.expanded
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/opt/reefgauge/expand-data.sh
-ExecStartPost=/bin/touch /data/.expanded
+# No ExecStartPost stamp. The script exits 0 on every failure on purpose - a
+# unit that will not boot is worse than a unit with less space - so stamping on
+# exit stamped on failure too, and capped that card at the bench size for good.
+# The script writes the stamp itself, on the paths where there is nothing left
+# to do.
 # Never block the boot. A unit with a small /data still watches a tank.
 TimeoutStartSec=120
 StandardOutput=journal

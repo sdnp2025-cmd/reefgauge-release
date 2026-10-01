@@ -17,8 +17,17 @@ set -uo pipefail
 
 log() { echo "reefgauge-expand: $*"; }
 
+# The stamp that stops this running again. Written HERE rather than by the
+# unit's ExecStartPost, which fired whether or not anything worked - and because
+# nothing in this script is fatal by design, one transient failure used to cap a
+# customer's storage at the bench size permanently, silently, forever. Now a
+# failure leaves no stamp and the next boot tries again; the retry is a findmnt
+# and an awk, and it stops as soon as there is nothing left to claim.
+done_already() { touch /data/.expanded 2>/dev/null || true; }
+
 DATA_SRC="$(findmnt -no SOURCE /data 2>/dev/null)" || true
 if [ -z "${DATA_SRC:-}" ]; then
+  # No stamp: /data not being mounted yet is exactly the case worth retrying.
   log "/data is not mounted - nothing to grow"; exit 0
 fi
 
@@ -31,15 +40,38 @@ PARTNUM="$(echo "$DATA_SRC" | grep -oE '[0-9]+$')"
 FREE_MB=$(parted -sm "$DISK" unit MiB print free 2>/dev/null \
           | awk -F: '/free;/ {gsub("MiB","",$4); if ($4+0 > m) m = $4+0} END {print int(m)}')
 if [ "${FREE_MB:-0}" -lt 512 ]; then
-  log "only ${FREE_MB:-0} MiB unallocated - already the size of the card"; exit 0
+  log "only ${FREE_MB:-0} MiB unallocated - the partition already fills the card"
+else
+  log "growing $DATA_SRC into ${FREE_MB} MiB of free space"
+  parted -s "$DISK" resizepart "$PARTNUM" 100% 2>&1 | sed 's/^/reefgauge-expand: /' || {
+    log "parted could not resize the partition - will try again next boot"; exit 0; }
+  # The kernel will not re-read a partition table for a disk with something
+  # mounted on it, so partprobe alone is unreliable here. partx -u updates the
+  # one partition through BLKPG, which does work on a live disk; partprobe is
+  # the fallback. Without this, resize2fs grows the filesystem only to the size
+  # the kernel still believes the partition is.
+  partx -u "$DISK" 2>/dev/null || partprobe "$DISK" 2>/dev/null || true
 fi
 
-log "growing $DATA_SRC into ${FREE_MB} MiB of free space"
-parted -s "$DISK" resizepart "$PARTNUM" 100% 2>&1 | sed 's/^/reefgauge-expand: /' || {
-  log "parted could not resize the partition - leaving it alone"; exit 0; }
-partprobe "$DISK" 2>/dev/null || true
-# ext4 grows online, so /data does not have to be unmounted for this.
-resize2fs "$DATA_SRC" 2>&1 | sed 's/^/reefgauge-expand: /' || {
-  log "resize2fs failed - the partition grew but the filesystem did not"; exit 0; }
-log "done: $(findmnt -no SIZE /data 2>/dev/null)"
+# The filesystem, checked against its partition rather than against free space.
+#
+# These are two separate steps, and the second one used to be unreachable once
+# it had failed: the partition had already grown, so every later boot found no
+# unallocated space left, declared the job done and stamped it. The card then
+# had a 27 GiB partition holding an 8 GiB filesystem, permanently.
+#
+# ext4 grows online, so /data does not have to be unmounted. A gigabyte of slack
+# is the threshold because a large ext4's own metadata accounts for well under
+# that, and a half-finished expansion is out by many times it.
+PART_KB=$(( $(blockdev --getsize64 "$DATA_SRC" 2>/dev/null || echo 0) / 1024 ))
+FS_KB=$(df -k "$DATA_SRC" 2>/dev/null | awk 'NR==2 {print $2}')
+if [ "${PART_KB:-0}" -gt 0 ] && [ "${FS_KB:-0}" -gt 0 ] \
+   && [ "$(( PART_KB - FS_KB ))" -gt 1048576 ]; then
+  log "filesystem is $(( (PART_KB - FS_KB) / 1024 )) MiB smaller than its partition - growing it"
+  resize2fs "$DATA_SRC" 2>&1 | sed 's/^/reefgauge-expand: /' || {
+    log "resize2fs failed - will try again next boot"; exit 0; }
+fi
+
+log "done: /data is $(findmnt -no SIZE /data 2>/dev/null)"
+done_already
 exit 0
