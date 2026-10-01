@@ -393,6 +393,37 @@ if [ "${1:-}" = "--factory" ]; then
     # the build date is a far better starting clock than 1970. See clock.js.
   fi
 
+  # Units that cannot work on a read-only root, and should never have been
+  # trying. Measured on the first unit built from a production card: eight failed
+  # services, and systemd abandons the plymouth splash and shows the message
+  # scroll whenever anything fails - so this was the first thing a buyer saw.
+  #
+  #   cloud-init (five units)  configured the unit during the build and has
+  #                            nothing left to do. It runs on every boot and
+  #                            writes /var/lib/cloud. Disabled the documented way
+  #                            rather than by masking five unit names.
+  #   apt-daily*               a sealed unit does not update itself with apt; its
+  #                            updates are git, into /data. It cannot write here
+  #                            anyway.
+  #   rpi-resize-swap-file     resizes /var/swap on the root filesystem, and was
+  #                            not merely failing - it was crash-looping, retrying
+  #                            until systemd gave up, on every boot.
+  #   ssh + host key regen     the scrub above deletes the host keys, and new ones
+  #                            cannot be written to a read-only root. A shipped
+  #                            unit has no key and a locked password, so sshd has
+  #                            nothing to offer except a failure on every boot and
+  #                            a listening port.
+  echo "==> Masking services that cannot run on a read-only root"
+  sudo install -d /etc/cloud
+  sudo touch /etc/cloud/cloud-init.disabled
+  for unit in apt-daily.service apt-daily.timer \
+              apt-daily-upgrade.service apt-daily-upgrade.timer \
+              rpi-resize-swap-file.service \
+              ssh.service ssh.socket regenerate_ssh_host_keys.service; do
+    sudo systemctl disable --now "$unit" 2>/dev/null || true
+    sudo systemctl mask "$unit" 2>/dev/null || true
+  done
+
   echo "==> Scrubbing machine identity so clones are not siblings"
   # SSH host keys: cloned keys mean every unit presents the same host identity,
   # so any customer can silently impersonate any other and no client can tell
@@ -458,6 +489,24 @@ if [ "${1:-}" = "--factory" ]; then
   fi
   if [ -e "$REPO_DIR/server/data" ]; then
     echo "!! server/data still present - the bench's readings would ship with it"
+    FAILED=1
+  fi
+  # Prove the masks took. These cannot be checked by verify, which runs before
+  # the seal, and the units they cover only fail once the root is actually
+  # read-only - on a boot that does not happen until a customer's card. So this is
+  # the only place the guarantee can be made, and it is made by checking rather
+  # than by having run some systemctl commands earlier and hoping.
+  for u in ssh.service rpi-resize-swap-file.service apt-daily-upgrade.service; do
+    if ! systemctl is-enabled "$u" 2>&1 | grep -q masked; then
+      echo "!! $u is not masked - it will fail on every boot of a sealed unit,"
+      echo "   and systemd replaces the ReefGauge splash with the message scroll"
+      echo "   whenever anything fails"
+      FAILED=1
+    fi
+  done
+  if [ ! -e /etc/cloud/cloud-init.disabled ]; then
+    echo "!! cloud-init is not disabled - five of its units fail on every boot of"
+    echo "   a sealed unit, because it writes /var/lib/cloud"
     FAILED=1
   fi
   [ "$FAILED" -eq 0 ] || { echo "!! DO NOT image this card."; exit 1; }

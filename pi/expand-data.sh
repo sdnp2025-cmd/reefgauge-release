@@ -43,8 +43,21 @@ if [ "${FREE_MB:-0}" -lt 512 ]; then
   log "only ${FREE_MB:-0} MiB unallocated - the partition already fills the card"
 else
   log "growing $DATA_SRC into ${FREE_MB} MiB of free space"
-  parted -s "$DISK" resizepart "$PARTNUM" 100% 2>&1 | sed 's/^/reefgauge-expand: /' || {
-    log "parted could not resize the partition - will try again next boot"; exit 0; }
+  # sfdisk, not parted. parted refuses to resize a partition that is in use, and
+  # /data is mounted by definition here - this script exists to grow the
+  # filesystem the unit is running on. That refusal is why the first production
+  # card came up with /data still 8 GiB and 15 GB of the card unallocated: the
+  # same mistake, in the same words, as the root growth in the cloud-init bootcmd,
+  # which was fixed and this was not.
+  #
+  # sfdisk --no-reread writes the table anyway; partx -u then updates the kernel's
+  # view through BLKPG, which does work on a live disk. ",+" means "keep the
+  # start, take everything that follows".
+  if ! printf ',+\n' | sfdisk --no-reread --force -N "$PARTNUM" "$DISK" >> /dev/null 2>&1; then
+    log "sfdisk could not resize the partition, trying parted"
+    parted -s "$DISK" resizepart "$PARTNUM" 100% 2>&1 | sed 's/^/reefgauge-expand: /' || {
+      log "could not resize the partition - will try again next boot"; exit 0; }
+  fi
   # The kernel will not re-read a partition table for a disk with something
   # mounted on it, so partprobe alone is unreliable here. partx -u updates the
   # one partition through BLKPG, which does work on a live disk; partprobe is
