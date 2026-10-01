@@ -110,7 +110,11 @@ sudo visudo -c -q
 # whatever the host ends up called. %h expands to the current hostname and is
 # re-expanded when it changes, so this needs no maintenance.
 echo "==> Advertising the terminal on the network (mDNS)"
-sudo bash "$(dirname "$0")/mdns-service.sh"
+# $REPO_DIR, not $(dirname "$0"): $0 is the relative "pi/install.sh" this is
+# documented to be run as, and by here the working directory is $REPO_DIR/sensor
+# from the venv step above, where "pi/..." does not exist. Every other sibling
+# script in this file is already called through $REPO_DIR.
+sudo bash "$REPO_DIR/pi/mdns-service.sh"
 
 echo "==> Installing systemd services"
 render_unit() {  # render_unit <src> <dest>

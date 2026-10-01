@@ -22,6 +22,44 @@ manage_resolv_conf: false
 # some tooling, and the docs and the puck's service lookup both use lowercase.
 hostname: reef-terminal
 manage_etc_hosts: true
+# --------------------------------------------------------------- root size --
+# prepare-card.sh removed the "resize" token from cmdline.txt, so nothing grows
+# the root partition any more. Grow it to a fixed size instead.
+#
+# This has to happen in bootcmd and not runcmd: the stock Lite root is ~2.3 GiB
+# with about a gigabyte spare, and the packages below plus Node, the npm tree
+# and the dashboard build come to roughly 5 GB. bootcmd runs in cloud-init's
+# init stage, before packages; runcmd runs at the very end, far too late.
+#
+# Everything here is a no-op the second time: on a shipped unit the partition is
+# already this size, so it exits before touching anything. It has to be, because
+# bootcmd runs on EVERY boot, including on a sealed read-only unit.
+bootcmd:
+  - |
+    set -u
+    TARGET_MIB=7168
+    DISK=/dev/mmcblk0
+    PART=/dev/mmcblk0p2
+    [ -b "$PART" ] || exit 0
+    cur=$(blockdev --getsize64 "$PART" 2>/dev/null) || exit 0
+    tgt=$((TARGET_MIB * 1048576))
+    # Already big enough - the shipped-unit case, and the only case that matters
+    # for how often this runs. Leave immediately.
+    [ "$cur" -ge "$tgt" ] && exit 0
+    # Refuse on a read-only root: that is a sealed unit, and resizing one is
+    # never right. Cheaper and more honest than parsing mount options.
+    touch /.reefgauge-rw-probe 2>/dev/null || exit 0
+    rm -f /.reefgauge-rw-probe
+    # parted cannot make the kernel re-read a table while / is mounted from it,
+    # so it warns and we update the in-kernel view ourselves. Both are allowed
+    # to fail: if the partition did not actually grow we do not touch the
+    # filesystem, which is the only step that could lose data.
+    parted -s "$DISK" resizepart 2 "${TARGET_MIB}MiB" >/dev/null 2>&1 || true
+    partx -u "$DISK" >/dev/null 2>&1 || partprobe "$DISK" >/dev/null 2>&1 || true
+    new=$(blockdev --getsize64 "$PART" 2>/dev/null) || exit 0
+    [ "$new" -gt "$cur" ] || exit 0
+    resize2fs "$PART" >/dev/null 2>&1 || true
+
 
 packages:
   # The terminal advertises itself as _reefgauge._tcp so the CO2 puck can find

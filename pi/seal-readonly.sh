@@ -59,14 +59,42 @@ note "largest free region: ${FREE_MB:-0} MiB"
 # 8 GiB is the floor from the sizing work: the database is bounded by the 90-day
 # retention in db.js, but photos are not, and a restore needs room for a 2 GB
 # archive plus its unpacked contents at the same time.
-[ "${FREE_MB:-0}" -ge 8192 ] \
-  || die "only ${FREE_MB:-0} MiB free on $DISK - need at least 8192.
-   The root partition has probably been auto-expanded to fill the card. Build
-   the golden image on a card where it has not, or shrink the root first."
+DATA_MIB="${REEF_DATA_MIB:-8192}"
+[ "${FREE_MB:-0}" -ge "$DATA_MIB" ] \
+  || die "only ${FREE_MB:-0} MiB free on $DISK - need at least ${DATA_MIB}.
+   The root partition has probably been auto-expanded to fill the card. That is
+   Pi OS doing it on first boot, from a bare 'resize' token on the kernel
+   command line; scripts/prepare-card.sh removes that token, so a card prepared
+   with it will have the room. Re-flash and prepare the card, or set
+   REEF_DATA_MIB lower if you know what you are trading away."
 
 # -------------------------------------------------------- create /data ------
+# Exactly DATA_MIB, immediately after the root partition, and NOT all the free
+# space. Two reasons, and the second is the one that matters.
+#
+# The image captured from this card runs to the end of the last partition, so a
+# /data that swallowed a 32 GB card would make a 30 GB master image: slow to
+# write onto every unit of a production run, and impossible to write onto any
+# card even slightly smaller than the one it was built on. Bounded, the whole
+# image is about 16 GiB and fits any 32 GB card.
+#
+# Nothing is lost by it, because reefgauge-expand-data.service grows /data into
+# whatever is left of the buyer's card on first boot. And if that ever fails,
+# the unit still has the full 8 GiB floor rather than a sliver - which is why
+# this is bounded at the floor and not at something smaller.
 say "Creating the data partition"
-do_it "parted -s '$DISK' --align optimal mkpart primary ext4 '-${FREE_MB}MiB' '100%'"
+LAST_END_MIB=$(parted -sm "$DISK" unit MiB print 2>/dev/null \
+  | awk -F: '$1 ~ /^[0-9]+$/ { gsub("MiB","",$3); if ($3+0 > e) e = $3+0 } END { print int(e) + 1 }')
+DISK_MIB=$(parted -sm "$DISK" unit MiB print 2>/dev/null \
+  | awk -F: 'NR==2 { gsub("MiB","",$2); print int($2) }')
+[ "${LAST_END_MIB:-0}" -gt 0 ] || die "could not find where the last partition ends"
+DATA_END_MIB=$(( LAST_END_MIB + DATA_MIB ))
+if [ "$DATA_END_MIB" -gt "${DISK_MIB:-0}" ]; then
+  DATA_END_MIB="$DISK_MIB"
+fi
+note "/data: ${LAST_END_MIB}MiB to ${DATA_END_MIB}MiB ($(( DATA_END_MIB - LAST_END_MIB )) MiB)"
+note "the rest of the card is left unallocated; first boot grows /data into it"
+do_it "parted -s '$DISK' --align optimal mkpart primary ext4 '${LAST_END_MIB}MiB' '${DATA_END_MIB}MiB'"
 sleep 2 || true
 if [ "$CHECK" -eq 1 ]; then
   # In check mode the partition was not created, so "the last partition on the
