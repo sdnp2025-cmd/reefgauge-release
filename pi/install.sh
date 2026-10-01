@@ -401,14 +401,39 @@ if [ "${1:-}" = "--factory" ]; then
   [ -e "$RT_HOME/.ssh" ] && { echo "!! $RT_HOME/.ssh still present"; FAILED=1; }
   sudo passwd --status "$RT_USER" 2>/dev/null | grep -qE ' (L|LK) ' \
     || { echo "!! $RT_USER's password is not locked"; FAILED=1; }
+  # config.json holds an apiToken minted when it was created. A golden image is
+  # byte-identical, so leaving the file behind gives every unit in the run the
+  # same token - a shared secret that authenticates the puck and the relay, on
+  # cards sold to different people. Same argument as the SSH host keys above,
+  # and the same reason it is proven here rather than assumed.
+  if [ -e "$REPO_DIR/server/config.json" ]; then
+    echo "!! server/config.json still present - every unit would ship the same apiToken"
+    FAILED=1
+  fi
+  if [ -e "$REPO_DIR/server/data" ]; then
+    echo "!! server/data still present - the bench's readings would ship with it"
+    FAILED=1
+  fi
   [ "$FAILED" -eq 0 ] || { echo "!! DO NOT image this card."; exit 1; }
 
   echo "==> Factory image verified: release remote, no password, no build key."
   echo "    Now: sudo shutdown now"
 fi
 
+# Say what is actually true of the unit in front of you. This used to print the
+# desktop path's steps unconditionally: it told you to enable I2C that cloud-init
+# had already enabled, and called the kiosk a user service on a Lite unit where
+# it had just been installed as a system one.
 echo
 echo "Done. Next steps:"
-echo "  1. Edit server/config.json, then: sudo systemctl restart reef-server"
-echo "  2. Enable I2C: sudo raspi-config -> Interface Options -> I2C"
-echo "  3. Reboot to start the kiosk (installed as a user service)"
+if [ -e /dev/i2c-1 ]; then
+  echo "  - I2C is on and the kiosk is installed; nothing else is required."
+else
+  echo "  - Enable I2C (the SCD41 needs it): sudo raspi-config nonint do_i2c 0"
+fi
+if [ "$HAS_DESKTOP" -eq 1 ]; then
+  echo "  - The kiosk is a user service and starts at the next login or reboot."
+else
+  echo "  - The kiosk is a system service on tty1: sudo systemctl start reef-kiosk"
+fi
+echo "  - The wizard runs on first open; there is no config file to hand-edit."
