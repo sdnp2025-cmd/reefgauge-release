@@ -416,12 +416,25 @@ if [ "${1:-}" = "--factory" ]; then
   echo "==> Masking services that cannot run on a read-only root"
   sudo install -d /etc/cloud
   sudo touch /etc/cloud/cloud-init.disabled
+  # Loudly. The first version of this sent both commands to /dev/null and ended
+  # them with "|| true", so when the masks did not take, the only evidence was
+  # the self-check refusing to image the card and no indication why. That is the
+  # third time in this project that hiding a command's stderr has cost an
+  # afternoon; the pattern is the bug, not the command.
   for unit in apt-daily.service apt-daily.timer \
               apt-daily-upgrade.service apt-daily-upgrade.timer \
               rpi-resize-swap-file.service \
               ssh.service ssh.socket regenerate_ssh_host_keys.service; do
-    sudo systemctl disable --now "$unit" 2>/dev/null || true
-    sudo systemctl mask "$unit" 2>/dev/null || true
+    if ! sudo systemctl list-unit-files "$unit" --no-legend 2>/dev/null | grep -q .; then
+      echo "    $unit: not present on this image, skipping"
+      continue
+    fi
+    out=$(sudo systemctl disable --now "$unit" 2>&1) || echo "    disable $unit: $out"
+    if out=$(sudo systemctl mask "$unit" 2>&1); then
+      echo "    $unit: masked"
+    else
+      echo "    $unit: MASK FAILED: $out"
+    fi
   done
 
   echo "==> Scrubbing machine identity so clones are not siblings"
@@ -441,10 +454,12 @@ if [ "${1:-}" = "--factory" ]; then
   # image — readable by anyone who mounts the card.
   sudo rm -f /etc/NetworkManager/system-connections/*.nmconnection
 
-  # The key that built this image. Left in place it is a permanent way into
-  # every unit ever sold, and one leaked private key opens the whole fleet.
-  # known_hosts and any stray private key go with it.
-  sudo rm -rf "$RT_HOME/.ssh"
+  # The build key and the password lock are deliberately NOT done here.
+  #
+  # They are the two things that make the unit unreachable, and doing them before
+  # the checks meant a refusal left a card that could not be inspected or
+  # re-run - which is exactly what happened the first time the mask check fired.
+  # They happen at the very end, once everything else has been proven. See below.
 
   # No password on a shipped unit - not a password to be remembered and
   # changed. A golden image is byte-identical, so it cannot carry a per-unit
@@ -453,8 +468,6 @@ if [ "${1:-}" = "--factory" ]; then
   # to remember. Physical access still reaches the kiosk (as with any
   # appliance); remote access is the customer-initiated relay in
   # server/src/supportSession.js.
-  sudo passwd --lock "$RT_USER" > /dev/null 2>&1 \
-    || echo "    (could not lock $RT_USER - do NOT image this card)"
   sudo sed -i 's/^#\?PasswordAuthentication .*/PasswordAuthentication no/' \
     /etc/ssh/sshd_config 2>/dev/null || true
 
@@ -465,9 +478,6 @@ if [ "${1:-}" = "--factory" ]; then
   # Prove it rather than claim it - these are the two that cannot be undone
   # once a production run is stamped.
   FAILED=0
-  [ -e "$RT_HOME/.ssh" ] && { echo "!! $RT_HOME/.ssh still present"; FAILED=1; }
-  sudo passwd --status "$RT_USER" 2>/dev/null | grep -qE ' (L|LK) ' \
-    || { echo "!! $RT_USER's password is not locked"; FAILED=1; }
   # config.json holds an apiToken minted when it was created. A golden image is
   # byte-identical, so leaving the file behind gives every unit in the run the
   # same token - a shared secret that authenticates the puck and the relay, on
@@ -509,7 +519,27 @@ if [ "${1:-}" = "--factory" ]; then
     echo "   a sealed unit, because it writes /var/lib/cloud"
     FAILED=1
   fi
-  [ "$FAILED" -eq 0 ] || { echo "!! DO NOT image this card."; exit 1; }
+  [ "$FAILED" -eq 0 ] || {
+    echo "!! DO NOT image this card."
+    echo "   The build key and the password are still in place, so this unit is"
+    echo "   still reachable: fix what is listed above and run this again."
+    exit 1
+  }
+
+  # Only now. These are the two steps that cannot be undone from here - they are
+  # what makes the unit unreachable - so they happen after everything else has
+  # been proven, not before. Doing them first meant a refusal produced a card
+  # that could not be inspected, re-run, or even logged into.
+  echo "==> Closing the unit: removing the build key and locking the password"
+  sudo rm -rf "$RT_HOME/.ssh"
+  sudo passwd --lock "$RT_USER" > /dev/null 2>&1 \
+    || echo "    (could not lock $RT_USER - do NOT image this card)"
+
+  LOCKOUT_FAILED=0
+  [ -e "$RT_HOME/.ssh" ] && { echo "!! $RT_HOME/.ssh still present"; LOCKOUT_FAILED=1; }
+  sudo passwd --status "$RT_USER" 2>/dev/null | grep -qE ' (L|LK) ' \
+    || { echo "!! $RT_USER's password is not locked"; LOCKOUT_FAILED=1; }
+  [ "$LOCKOUT_FAILED" -eq 0 ] || { echo "!! DO NOT image this card."; exit 1; }
 
   echo "==> Factory image verified: release remote, no password, no build key."
   echo "    Now: sudo shutdown now"
