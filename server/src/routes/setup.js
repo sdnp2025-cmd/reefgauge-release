@@ -207,15 +207,49 @@ export default async function setupRoutes(app, { config, state }) {
         ]
       }
     }
-    const out = await nmcli(['-t', '-f', 'SSID,SIGNAL,SECURITY', 'dev', 'wifi', 'list', '--rescan', 'yes'])
-    const best = new Map()
-    for (const line of out.split('\n').filter(Boolean)) {
-      const [ssid, signal, security] = splitFields(line)
-      if (!ssid) continue
-      const entry = { ssid, signal: Number(signal), security }
-      if (!best.has(ssid) || best.get(ssid).signal < entry.signal) best.set(ssid, entry)
+    // Turn the radio on before asking it anything. A Raspberry Pi leaves WLAN
+    // rfkill-soft-blocked until something unblocks it, and a blocked radio does
+    // not fail a scan - it returns nothing, or blocks until our timeout. The
+    // wizard then drew "Scanning..." indefinitely on the first screen a customer
+    // ever sees. Best effort: if it is already on this is a no-op.
+    try { await nmcli(['radio', 'wifi', 'on']) } catch { /* report below instead */ }
+
+    // Ask whether there is a usable radio before spending 45 seconds finding out
+    // there was nothing to scan with. Device state is a local lookup.
+    let state = null
+    try {
+      const dev = await nmcli(['-t', '-f', 'DEVICE,TYPE,STATE', 'device', 'status'])
+      const row = dev.split('\n').map(splitFields).find((f) => f[1] === 'wifi')
+      state = row ? row[2] : null
+    } catch { /* fall through and let the scan report */ }
+
+    if (state === null) {
+      return { networks: [], error: 'No Wi-Fi adapter found on this terminal. Use the ethernet cable.' }
     }
-    return { networks: [...best.values()].sort((a, b) => b.signal - a.signal) }
+    if (state === 'unavailable') {
+      return {
+        networks: [],
+        error: 'The Wi-Fi radio is blocked. On a Raspberry Pi that normally means '
+             + 'no WLAN country has been set, which the radio requires before it '
+             + 'will scan. Use ethernet for now; this needs fixing on the unit.'
+      }
+    }
+
+    try {
+      const out = await nmcli(['-t', '-f', 'SSID,SIGNAL,SECURITY', 'dev', 'wifi', 'list', '--rescan', 'yes'])
+      const best = new Map()
+      for (const line of out.split('\n').filter(Boolean)) {
+        const [ssid, signal, security] = splitFields(line)
+        if (!ssid) continue
+        const entry = { ssid, signal: Number(signal), security }
+        if (!best.has(ssid) || best.get(ssid).signal < entry.signal) best.set(ssid, entry)
+      }
+      return { networks: [...best.values()].sort((a, b) => b.signal - a.signal) }
+    } catch (err) {
+      // Never throw out of here. A 500 left the wizard with networks === null,
+      // which renders as "Scanning..." with no way forward and nothing said.
+      return { networks: [], error: `Wi-Fi scan failed: ${err.message ?? err}` }
+    }
   })
 
 // `nmcli dev wifi connect` looks the SSID up in the scan cache and infers the

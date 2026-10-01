@@ -176,6 +176,17 @@ runcmd:
   # and the kiosk takes tty1 as a system service instead.
   - [ raspi-config, nonint, do_blanking, "1" ]
 
+  # The WLAN country. A Raspberry Pi will not scan without one - the radio stays
+  # rfkill-soft-blocked - and nothing in this project set it. So the first unit
+  # ever booted from a clone reached "Connect to Wi-Fi" and listed nothing, with
+  # no way forward. Every build before that had used ethernet, so the one screen
+  # every customer meets first was the one screen never tested.
+  #
+  # US because that is where these ship. It is a legal setting rather than a
+  # preference, so it is stated here instead of guessed at runtime; a unit sold
+  # elsewhere needs this changed.
+  - [ raspi-config, nonint, do_wifi_country, "US" ]
+
   # Hardware access groups, tolerantly — these exist on Raspberry Pi OS, but one
   # missing must not abort first boot and leave the unit half-built.
   - [ sh, -c, "for g in i2c gpio spi render input video; do adduser pi $g 2>/dev/null || true; done" ]

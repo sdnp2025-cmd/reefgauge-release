@@ -110,7 +110,12 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
   }
 
   const scanWifi = () => run(async () => {
-    setNetworks((await api('/api/setup/wifi/networks')).networks)
+    // networks stays null while scanning, and null renders as "Scanning...".
+    // So a failed scan has to land on [] - otherwise the first screen a customer
+    // sees says it is scanning, forever, with the reason nowhere on the display.
+    const res = await api('/api/setup/wifi/networks')
+    setNetworks(res.networks ?? [])
+    if (res.error) setError(res.error)
   })
 
   const connectWifi = () => run(async () => {
@@ -330,6 +335,9 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
                 <p>Choose your home network:</p>
                 <div className="setup-list">
                   {networks == null && <div className="setup-note">Scanning…</div>}
+                  {networks?.length === 0 && (
+                    <div className="setup-note">No networks found. Use ethernet, or try Rescan.</div>
+                  )}
                   {networks?.map((n) => (
                     <button key={n.ssid} className="setup-row" onClick={() => setPickedSsid(n.ssid)}>
                       <span>{n.ssid}</span>
