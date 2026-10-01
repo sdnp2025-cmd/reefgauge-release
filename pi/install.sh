@@ -357,6 +357,29 @@ if [ "${1:-}" = "--factory" ]; then
   rm -f "$REPO_DIR/server/config.json"
   rm -rf "$REPO_DIR/server/data"
 
+  # A SEALED unit does not read either of those at runtime. reef-server.service
+  # sets REEFGAUGE_CONFIG=/data/reefgauge/config.json and REEFGAUGE_DATA=/data/
+  # reefgauge, and seal-readonly.sh copied the config there on its way past. So
+  # scrubbing only the checkout leaves the file the product actually uses - with
+  # the apiToken that authenticates the CO2 puck and the support relay - byte
+  # identical on every card in the run, which is a shared secret across units
+  # sold to different people.
+  if findmnt -no TARGET /data > /dev/null 2>&1; then
+    echo "==> Factory reset: clearing /data (what a sealed unit really reads)"
+    sudo rm -rf /data/reefgauge/* /data/tmp/* 2>/dev/null || true
+
+    # These are bound OUT of /data, and the bind mounts are written to fstab but
+    # not active until the next boot - which does not happen before this card is
+    # imaged. So the rm of /etc/NetworkManager/system-connections above deletes
+    # the originals while the copies under /data survive, and the bench's SSID
+    # and PSK come back the moment the customer's unit mounts the binds.
+    sudo rm -f  /data/etc/NetworkManager/system-connections/* 2>/dev/null || true
+    sudo rm -rf /data/var/lib/NetworkManager/* 2>/dev/null || true
+
+    # /data/var/lib/systemd/timesync is deliberately kept: there is no RTC, and
+    # the build date is a far better starting clock than 1970. See clock.js.
+  fi
+
   echo "==> Scrubbing machine identity so clones are not siblings"
   # SSH host keys: cloned keys mean every unit presents the same host identity,
   # so any customer can silently impersonate any other and no client can tell
@@ -408,6 +431,16 @@ if [ "${1:-}" = "--factory" ]; then
   # and the same reason it is proven here rather than assumed.
   if [ -e "$REPO_DIR/server/config.json" ]; then
     echo "!! server/config.json still present - every unit would ship the same apiToken"
+    FAILED=1
+  fi
+  if [ -e /data/reefgauge/config.json ]; then
+    echo "!! /data/reefgauge/config.json still present - that is the file a sealed"
+    echo "   unit actually reads, so every unit would ship the same apiToken"
+    FAILED=1
+  fi
+  if ls /data/etc/NetworkManager/system-connections/* > /dev/null 2>&1; then
+    echo "!! /data/etc/NetworkManager/system-connections is not empty - the bench's"
+    echo "   Wi-Fi SSID and PSK would ship inside every card"
     FAILED=1
   fi
   if [ -e "$REPO_DIR/server/data" ]; then
