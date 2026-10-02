@@ -429,8 +429,7 @@ if [ "${1:-}" = "--factory" ]; then
   # afternoon; the pattern is the bug, not the command.
   for unit in apt-daily.service apt-daily.timer \
               apt-daily-upgrade.service apt-daily-upgrade.timer \
-              rpi-resize-swap-file.service \
-              ssh.service ssh.socket regenerate_ssh_host_keys.service; do
+              rpi-resize-swap-file.service; do
     if ! sudo systemctl list-unit-files "$unit" --no-legend 2>/dev/null | grep -q .; then
       echo "    $unit: not present on this image, skipping"
       continue
@@ -512,8 +511,11 @@ if [ "${1:-}" = "--factory" ]; then
   # read-only - on a boot that does not happen until a customer's card. So this is
   # the only place the guarantee can be made, and it is made by checking rather
   # than by having run some systemctl commands earlier and hoping.
-  for u in ssh.service rpi-resize-swap-file.service apt-daily-upgrade.service; do
-    if ! systemctl is-enabled "$u" 2>&1 | grep -q masked; then
+  # Check the symlink mask actually creates, not systemctl's wording. The previous
+  # version grepped `is-enabled` for "masked" and reported three units unmasked
+  # that the masking step had just confirmed, one line earlier, as masked.
+  for u in rpi-resize-swap-file.service apt-daily-upgrade.service; do
+    if [ "$(readlink -f "/etc/systemd/system/$u" 2>/dev/null)" != "/dev/null" ]; then
       echo "!! $u is not masked - it will fail on every boot of a sealed unit,"
       echo "   and systemd replaces the ReefGauge splash with the message scroll"
       echo "   whenever anything fails"
@@ -536,12 +538,30 @@ if [ "${1:-}" = "--factory" ]; then
   # what makes the unit unreachable - so they happen after everything else has
   # been proven, not before. Doing them first meant a refusal produced a card
   # that could not be inspected, re-run, or even logged into.
-  echo "==> Closing the unit: removing the build key and locking the password"
+  echo "==> Closing the unit: masking SSH, removing the build key, locking the password"
+  # SSH is masked HERE and not with the others.
+  #
+  # Masking it earlier stopped sshd while this script was still running through
+  # an SSH session - it killed the channel the factory step needs, and the unit
+  # could not be reached again to find out why the step had refused. Same class of
+  # mistake as doing the key removal before the checks, and the same fix: the
+  # things that close the door go last.
+  for u in ssh.service ssh.socket regenerate_ssh_host_keys.service; do
+    sudo systemctl disable "$u" > /dev/null 2>&1 || true
+    sudo systemctl mask "$u" > /dev/null 2>&1 || true
+  done
   sudo rm -rf "$RT_HOME/.ssh"
   sudo passwd --lock "$RT_USER" > /dev/null 2>&1 \
     || echo "    (could not lock $RT_USER - do NOT image this card)"
 
   LOCKOUT_FAILED=0
+  for u in ssh.service ssh.socket; do
+    if [ "$(readlink -f "/etc/systemd/system/$u" 2>/dev/null)" != "/dev/null" ]; then
+      echo "!! $u is not masked - it fails on every boot of a sealed unit, because"
+      echo "   the host keys were just deleted and a read-only root cannot write new ones"
+      LOCKOUT_FAILED=1
+    fi
+  done
   [ -e "$RT_HOME/.ssh" ] && { echo "!! $RT_HOME/.ssh still present"; LOCKOUT_FAILED=1; }
   sudo passwd --status "$RT_USER" 2>/dev/null | grep -qE ' (L|LK) ' \
     || { echo "!! $RT_USER's password is not locked"; LOCKOUT_FAILED=1; }
