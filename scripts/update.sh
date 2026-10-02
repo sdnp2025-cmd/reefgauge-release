@@ -44,8 +44,17 @@ fi
 
 # Snapshot the built dashboard: it is what the customer actually sees, and a
 # failed rebuild would otherwise leave it missing or half-written.
-rm -rf web/dist.prev
-[ -d web/dist ] && cp -a web/dist web/dist.prev
+#
+# But only if there is no snapshot already. dist.prev is removed on the success
+# path at the end of this script, so one still present here means the previous
+# run never finished - a power cut mid-build - and web/dist may be that run's
+# broken output. Snapshotting it would promote a broken build to "known good",
+# and the rollback this script exists to provide would then restore it.
+if [ -d web/dist.prev ]; then
+  echo "==> Keeping the dashboard snapshot left by an unfinished earlier update"
+elif [ -d web/dist ]; then
+  cp -a web/dist web/dist.prev
+fi
 
 rollback() {
   echo "!! Update failed — rolling back to $PREV"
