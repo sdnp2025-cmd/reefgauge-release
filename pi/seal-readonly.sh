@@ -257,6 +257,13 @@ fi
 # factory bench's router handed out - which is invisible when the test network IS
 # the bench network, and total DNS failure on a customer's.
 do_it "ln -sfn /run/NetworkManager/resolv.conf /etc/resolv.conf"
+# And tell NetworkManager to leave /etc/resolv.conf alone. With only the symlink,
+# DNS works - the /run copy is the one NM always maintains - but NM's default
+# rc-manager still tries to rewrite /etc/resolv.conf through a temp file and
+# logs "could not commit DNS changes: Read-only file system" on every
+# connection. Seen in the journal of the first unit built with the symlink.
+do_it "install -d /etc/NetworkManager/conf.d"
+do_it "printf '[main]\\nrc-manager=unmanaged\\n' > /etc/NetworkManager/conf.d/90-reefgauge-readonly.conf"
 
 say "Done"
 cat <<'NEXT'
