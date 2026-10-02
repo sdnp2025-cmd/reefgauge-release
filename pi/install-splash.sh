@@ -14,10 +14,19 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # package nobody mentioned.
 if ! command -v plymouth-set-default-theme > /dev/null 2>&1; then
   echo "==> Plymouth is not installed (normal on Lite) - installing it"
-  apt-get install -y --no-install-recommends plymouth plymouth-themes \
+  # Wait for the dpkg lock rather than racing it.
+  #
+  # During a golden-image build this runs minutes after a long apt session, and
+  # apt-daily is not masked until the factory step - so the lock was still held
+  # and this failed with "Could not get lock /var/lib/dpkg/lock-frontend". The
+  # unit then had no splash, and because the failure exited 0 the build reported
+  # "plymouth theme installed" and went on. verify caught it; nothing else would
+  # have.
+  apt-get -o DPkg::Lock::Timeout=300 install -y --no-install-recommends \
+      plymouth plymouth-themes \
     || { echo "!! could not install plymouth. The unit will boot showing console"
          echo "   text instead of the splash. Everything else still works."
-         exit 0; }
+         exit 1; }
 fi
 
 # The theme assets live beside this script. They are copied to /opt/reefgauge
@@ -36,6 +45,14 @@ THEME=/usr/share/plymouth/themes/reefgauge
 install -d "$THEME"
 install -m 644 "$ASSETS"/* "$THEME"/
 plymouth-set-default-theme -R reefgauge
+
+# Say it only if it is so. "exit 0 on failure" was there to keep a development
+# checkout from being blocked by a cosmetic step, but it also let a build print
+# "plymouth theme installed, cmdline updated" over a unit that had neither.
+if [ ! -f /usr/share/plymouth/themes/reefgauge/reefgauge.plymouth ]; then
+  echo "!! the reefgauge theme is not in place"
+  exit 1
+fi
 
 # /boot/firmware is mounted read-only on a sealed unit, so take it rw for the
 # two lines below and put it back. Doing nothing here would leave the firmware's
