@@ -35,6 +35,12 @@ if ! command -v node > /dev/null || [ "$(node -e 'console.log(process.versions.n
   sudo apt-get install -y nodejs
 fi
 
+# Belt and braces: the same mask the cloud-init bootcmd applies, for any unit
+# installed by another route. apt-daily-upgrade holding the dpkg lock and then
+# restarting sshd mid-build cost a whole image.
+sudo systemctl mask apt-daily.timer apt-daily-upgrade.timer >/dev/null 2>&1 || true
+sudo systemctl stop apt-daily.timer apt-daily-upgrade.timer >/dev/null 2>&1 || true
+
 echo "==> Installing server dependencies"
 cd "$REPO_DIR/server"
 as_user npm install

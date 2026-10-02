@@ -45,6 +45,19 @@ bootcmd:
     # when it failed the evidence was a half-built card and nothing else.
     set -u
     LOG=/boot/firmware/reefgauge-grow.log
+    # Stop Debian's unattended apt before anything else in the build needs apt.
+    #
+    # apt-daily-upgrade ran during a golden-image build, held the dpkg lock, and
+    # while the boot-screen step politely waited for it, that upgrade installed a
+    # new openssh-server and restarted sshd - which dropped the build's SSH
+    # connection mid-script. The unit ended up with plymouth installed and its
+    # cmdline never edited: a splash that could not appear.
+    #
+    # A sealed unit updates by git into /data, never with apt, so these have
+    # nothing to do here at any point. The factory step masks them too; this is
+    # earlier, before cloud-init's own package install.
+    systemctl mask apt-daily.timer apt-daily-upgrade.timer >/dev/null 2>&1 || true
+    systemctl stop apt-daily.timer apt-daily-upgrade.timer >/dev/null 2>&1 || true
     TARGET_MIB=7168
     DISK=/dev/mmcblk0
     PART=/dev/mmcblk0p2
