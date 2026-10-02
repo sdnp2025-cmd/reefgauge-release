@@ -53,6 +53,7 @@ else
   # sfdisk --no-reread writes the table anyway; partx -u then updates the kernel's
   # view through BLKPG, which does work on a live disk. ",+" means "keep the
   # start, take everything that follows".
+  before=$(blockdev --getsize64 "$DATA_SRC" 2>/dev/null || echo 0)
   if ! printf ',+\n' | sfdisk --no-reread --force -N "$PARTNUM" "$DISK" >> /dev/null 2>&1; then
     log "sfdisk could not resize the partition, trying parted"
     parted -s "$DISK" resizepart "$PARTNUM" 100% 2>&1 | sed 's/^/reefgauge-expand: /' || {
@@ -64,6 +65,15 @@ else
   # the fallback. Without this, resize2fs grows the filesystem only to the size
   # the kernel still believes the partition is.
   partx -u "$DISK" 2>/dev/null || partprobe "$DISK" 2>/dev/null || true
+  # Did the kernel actually take it? If not, every check below compares the OLD
+  # size against itself, concludes there is nothing to do, and stamps - and the
+  # stamp stops this ever running again. The table on disk is grown; the kernel
+  # will read it at the next boot; this must be allowed to run then.
+  after=$(blockdev --getsize64 "$DATA_SRC" 2>/dev/null || echo 0)
+  if [ "$after" -le "$before" ]; then
+    log "the kernel did not pick up the new partition size - not stamping, will finish next boot"
+    exit 0
+  fi
 fi
 
 # The filesystem, checked against its partition rather than against free space.

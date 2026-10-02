@@ -446,8 +446,7 @@ if [ "${1:-}" = "--factory" ]; then
   # SSH host keys: cloned keys mean every unit presents the same host identity,
   # so any customer can silently impersonate any other and no client can tell
   # them apart. Regenerated on first boot by the ssh service.
-  sudo rm -f /etc/ssh/ssh_host_*
-  sudo systemctl enable regenerate_ssh_host_keys.service 2>/dev/null || true
+  # (host keys are deleted in the lockout block at the end - see there)
 
   # machine-id seeds DHCP identifiers and systemd's boot IDs. Cloned, units
   # collide on the customer's router.
@@ -527,6 +526,13 @@ if [ "${1:-}" = "--factory" ]; then
     echo "   a sealed unit, because it writes /var/lib/cloud"
     FAILED=1
   fi
+  if findmnt -no TARGET /data > /dev/null 2>&1; then
+    if ! systemctl is-enabled reefgauge-expand-data.service 2>/dev/null | grep -qx enabled; then
+      echo "!! reefgauge-expand-data.service is not enabled - every card written from"
+      echo "   this image would keep /data at the bench's 8 GiB and never grow it"
+      FAILED=1
+    fi
+  fi
   [ "$FAILED" -eq 0 ] || {
     echo "!! DO NOT image this card."
     echo "   The build key and the password are still in place, so this unit is"
@@ -539,6 +545,11 @@ if [ "${1:-}" = "--factory" ]; then
   # been proven, not before. Doing them first meant a refusal produced a card
   # that could not be inspected, re-run, or even logged into.
   echo "==> Closing the unit: masking SSH, removing the build key, locking the password"
+  # Host keys go here too, not up with the identity scrub. Deleting them earlier
+  # was a third door-closing step: the live sshd kept its keys in memory so the
+  # build's session survived, but a refusal followed by a power-cycle met a unit
+  # with no keys, a read-only /etc that cannot grow new ones, and a masked getty.
+  sudo rm -f /etc/ssh/ssh_host_*
   # SSH is masked HERE and not with the others.
   #
   # Masking it earlier stopped sshd while this script was still running through
@@ -566,6 +577,24 @@ if [ "${1:-}" = "--factory" ]; then
   sudo passwd --status "$RT_USER" 2>/dev/null | grep -qE ' (L|LK) ' \
     || { echo "!! $RT_USER's password is not locked"; LOCKOUT_FAILED=1; }
   [ "$LOCKOUT_FAILED" -eq 0 ] || { echo "!! DO NOT image this card."; exit 1; }
+
+  # The last thing of all: cloud-init's blanket grant. user-data.lite gives the
+  # build account "ALL=(ALL) NOPASSWD:ALL" and promises the factory step narrows
+  # it; until now nothing did. Every shipped unit therefore had unrestricted
+  # passwordless root for the account the server runs as, which made the whole
+  # /opt/reefgauge sudo-path hardening decorative. The product's own grants in
+  # reef-terminal and reef-terminal-ops stay; this file goes. It is the final
+  # step because every sudo above, including the password lock, depended on it -
+  # and the poweroff that follows is covered by reef-terminal-ops.
+  echo "==> Revoking the build account's blanket sudo"
+  sudo rm -f /etc/sudoers.d/90-cloud-init-users
+  if [ -e /etc/sudoers.d/90-cloud-init-users ]; then
+    echo "!! the blanket NOPASSWD:ALL grant is still present"; exit 1
+  fi
+  if sudo -n /usr/bin/true 2>/dev/null; then
+    echo "!! this account can still run arbitrary commands as root without a password"; exit 1
+  fi
+  echo "    blanket grant removed; only the product's own grants remain"
 
   echo "==> Factory image verified: release remote, no password, no build key."
   echo "    Now: sudo shutdown now"

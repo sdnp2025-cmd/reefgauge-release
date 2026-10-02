@@ -39,10 +39,30 @@ do_it() { if [ "$CHECK" -eq 1 ]; then printf '    would: %s\n' "$*"; else eval "
 [ "$(id -u)" -eq 0 ] || die "run with sudo"
 [ -e /boot/firmware/config.txt ] || die "this does not look like a Raspberry Pi"
 findmnt -no TARGET /data >/dev/null 2>&1 && die "/data is already mounted - this unit is already sealed"
+# Mounted is not the only "already done". A previous run that failed between
+# mkpart and mount leaves a formatted REEFDATA partition unmounted - and this
+# script, guarded only on the mount, would make a second 8 GiB partition with the
+# same label beside it. Two partitions answering LABEL=REEFDATA is a unit that
+# boots from whichever one the kernel lists first.
+if blkid -L REEFDATA >/dev/null 2>&1; then
+  die "a REEFDATA partition already exists ($(blkid -L REEFDATA)) but is not mounted.
+   A previous seal got as far as formatting it. Mount it at /data and re-run, or
+   delete that partition first - do not let this script create a second one."
+fi
 
 RT_USER="${SUDO_USER:-$(id -un)}"
 RT_HOME="$(getent passwd "$RT_USER" | cut -d: -f6)"
 [ -d "$RT_HOME" ] || die "cannot find the home directory for '$RT_USER'"
+
+# Precondition, checked BEFORE the first destructive step. This used to run after
+# /data had been created and the checkout moved - and then the script refused,
+# and the mount guard above blocked the retry its own message asked for.
+if grep -q '/opt/reefgauge/' /etc/sudoers.d/reef-terminal-ops 2>/dev/null; then
+  ok "sudo grants point at /opt (read-only)"
+else
+  die "sudoers still grants scripts inside the checkout, which is about to become
+   writable. That is a root escalation. Re-run pi/install.sh before sealing."
+fi
 
 # ------------------------------------------------------------- the card -----
 ROOT_SRC="$(findmnt -no SOURCE /)"            # e.g. /dev/mmcblk0p2
@@ -147,14 +167,7 @@ else
   note "already a symlink, or no checkout here - leaving it alone"
 fi
 
-# Confirm the grants point somewhere this user cannot rewrite. Getting this
-# wrong is a root escalation, not a broken feature.
-if grep -q '/opt/reefgauge/' /etc/sudoers.d/reef-terminal-ops 2>/dev/null; then
-  ok "sudo grants point at /opt (read-only)"
-else
-  die "sudoers still grants scripts inside the checkout, which is now writable.
-   That is a root escalation. Re-run pi/install.sh before sealing."
-fi
+# (sudoers precondition is checked at the top, before anything is created or moved)
 
 # Paths the OS fixes and the application cannot be told about. Each one is here
 # because losing it costs the customer something specific:
@@ -197,7 +210,9 @@ FSTAB_ADD=$(cat <<'FSTAB'
 # The root is read-only. Everything the product writes lives on /data, which is
 # the only partition a power cut can damage - and a damaged /data is a restore,
 # where a damaged / used to be a site visit.
-LABEL=REEFDATA  /data  ext4  defaults,noatime,nodev,nosuid  0  2
+# nofail: a dirty /data is a restore, not a brick. Without it, an fsck that cannot
+# auto-repair sends a unit with no SSH and no console to emergency.target.
+LABEL=REEFDATA  /data  ext4  defaults,noatime,nodev,nosuid,nofail,x-systemd.device-timeout=15  0  2
 
 # Bound out of /data because the OS fixes these paths and the application
 # cannot be told to look elsewhere.
@@ -210,6 +225,10 @@ LABEL=REEFDATA  /data  ext4  defaults,noatime,nodev,nosuid  0  2
 tmpfs  /tmp      tmpfs  defaults,noatime,nosuid,nodev,size=64M   0  0
 tmpfs  /var/tmp  tmpfs  defaults,noatime,nosuid,nodev,size=32M   0  0
 tmpfs  /var/log  tmpfs  defaults,noatime,nosuid,nodev,size=32M   0  0
+# udisks mounts a USB stick under /media/<user>/<label>, which it has to create.
+# On a read-only root that mkdir fails and every USB backup and restore reports
+# "no USB drive is plugged in".
+tmpfs  /media    tmpfs  defaults,noatime,nosuid,nodev,size=1M    0  0
 FSTAB
 )
 if grep -q 'ReefGauge: sealed unit' /etc/fstab 2>/dev/null; then
@@ -231,6 +250,13 @@ do_it "sed -i -E '/[[:space:]]\\/boot\\/firmware[[:space:]]/ s/(vfat[[:space:]]+
 if [ -f /etc/fake-hwclock.data ]; then
   do_it "ln -sfn /data/etc/fake-hwclock.data /etc/fake-hwclock.data"
 fi
+
+# DNS. NetworkManager writes /etc/resolv.conf directly unless it is a symlink into
+# its own runtime directory, in which case it writes there (rc-manager=auto). On a
+# read-only root the direct write fails silently and the file keeps whatever the
+# factory bench's router handed out - which is invisible when the test network IS
+# the bench network, and total DNS failure on a customer's.
+do_it "ln -sfn /run/NetworkManager/resolv.conf /etc/resolv.conf"
 
 say "Done"
 cat <<'NEXT'
