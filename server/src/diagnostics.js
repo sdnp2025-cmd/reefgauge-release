@@ -306,7 +306,7 @@ async function network() {
   // The internet is optional - weather and push need it, the tank does not.
   const ok = await run('curl', ['-sS', '-m', '6', '-o', '/dev/null', '-w', '%{http_code}', 'https://api.open-meteo.com/v1/forecast?latitude=0&longitude=0&current=temperature_2m'], 8000)
   out.push(check('internet', 'Internet', ok === '200' ? 'ok' : 'warn', ok === '200' ? 'reachable' : 'unreachable',
-    ok === '200' ? null : 'Weather, radar and phone alerts need the internet. The tank display does not.'))
+    ok === '200' ? null : 'Weather and phone alerts need the internet. The tank display does not.'))
   return out
 }
 
@@ -435,7 +435,11 @@ async function display(state) {
   }
   const r = (d.renderer || '').toLowerCase()
   const software = /swiftshader|llvmpipe|softpipe|software/.test(r)
-  const status = !d.webgl ? 'fail' : software ? 'warn' : 'ok'
+  // A warning, not a failure: nothing in the dashboard uses WebGL since the radar
+  // was removed. It is still worth saying, because the usual reason is that the
+  // GPU process in Chromium lost its context - and then the whole screen is being
+  // composited in software.
+  const status = (!d.webgl || software) ? 'warn' : 'ok'
   const value = d.webgl ? `${d.webgl}: ${d.renderer || 'renderer not exposed'}` : 'WebGL unavailable'
   if (status === 'ok') return [check('gfx', 'Display graphics', 'ok', value)]
 
@@ -455,7 +459,7 @@ async function display(state) {
   const why = d.error ? ` Chromium said: ${d.error}` : ''
   return [check('gfx', 'Display graphics', status, value,
     (!d.webgl
-      ? 'The browser has no WebGL. Anything drawn with it - the weather radar - fails while the rest of the dashboard looks normal.'
+      ? 'The browser has no WebGL. Nothing in the dashboard needs it, but it usually means the GPU process in Chromium is not healthy and the screen is being drawn in software.'
       : 'WebGL is running in software rather than on the GPU: it works, slowly, and heavy pages may give up.')
       + why + ' | ' + facts.join(' | '),
     'reefgauge logs <unit> --unit display shows what Chromium and cage printed when the GPU did not start.')]

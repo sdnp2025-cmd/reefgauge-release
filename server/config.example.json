@@ -59,8 +59,7 @@
   },
   "weather": {
     "latitude": 40.7128,
-    "longitude": -74.006,
-    "radarUrl": ""
+    "longitude": -74.006
   },
   "media": {
     "heosHost": "",

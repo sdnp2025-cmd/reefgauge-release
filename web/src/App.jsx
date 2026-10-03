@@ -10,7 +10,6 @@ import EquipmentOverlay from './components/EquipmentOverlay.jsx'
 import { TankView, WeatherView, AirView } from './components/Views.jsx'
 import PhotoManager from './components/PhotoManager.jsx'
 import IdleSlideshow from './components/IdleSlideshow.jsx'
-import RadarOverlay from './components/RadarOverlay.jsx'
 import DoorbellOverlay from './components/DoorbellOverlay.jsx'
 import SetupWizard from './components/SetupWizard.jsx'
 import SettingsHub from './components/SettingsHub.jsx'
@@ -86,7 +85,6 @@ export default function App() {
   })
   const [booting, setBooting] = useState(() => !phoneHandoff && wantsSplash())
   const [photosOpen, setPhotosOpen] = useState(false)
-  const [radarOpen, setRadarOpen] = useState(false)
   const [timerOpen, setTimerOpen] = useState(false)
   const [equipOpen, setEquipOpen] = useState(false)
   const [setupStatus, setSetupStatus] = useState(null)
@@ -171,7 +169,7 @@ export default function App() {
         <AlertCard />
         {view === 'home' && <HomeCards onOpen={setView} />}
         {view === 'tank' && <TankView onBack={home} onEquipment={() => setEquipOpen(true)} />}
-        {view === 'weather' && <WeatherView onBack={home} onRadar={() => setRadarOpen(true)} />}
+        {view === 'weather' && <WeatherView onBack={home} />}
         {view === 'air' && <AirView onBack={home} />}
         {view === 'log' && <TankLogView onBack={home} onOpen={setView} />}
         {view === 'icp' && <IcpView onBack={home} />}
@@ -180,7 +178,6 @@ export default function App() {
       <AirTicker onOpen={(t) => (t === 'equipment' ? setEquipOpen(true) : setView(t))} />
       {equipOpen && <EquipmentOverlay onClose={() => setEquipOpen(false)} />}
       {photosOpen && <PhotoManager onClose={() => setPhotosOpen(false)} />}
-      {radarOpen && <RadarOverlay onClose={() => setRadarOpen(false)} />}
       {timerOpen && <TimerPicker onClose={() => setTimerOpen(false)} />}
       <TimerBar />
       <IdleSlideshow />

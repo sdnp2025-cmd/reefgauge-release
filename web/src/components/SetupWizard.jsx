@@ -355,7 +355,7 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
         {step === 2 && (
           <div className="setup-body">
             <h1>Where is the tank?</h1>
-            <p>Used for your local weather, radar, and sunrise/sunset theme.</p>
+            <p>Used for your local weather and the sunrise/sunset theme.</p>
             <div className="setup-inline">
               <input {...fieldProps('locQuery', locQuery)} placeholder="City or town…" />
               <button className="setup-primary compact" onClick={searchLocation} disabled={busy || locQuery.length < 2}>Search</button>

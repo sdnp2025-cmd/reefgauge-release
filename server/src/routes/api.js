@@ -9,16 +9,6 @@ import { getRingSnapshot } from '../pollers/ring.js'
 import { SOUNDS, playTone, alarmConfig } from '../alarmSound.js'
 import { sendNtfy } from '../alerts.js'
 
-// Free, embeddable live radar (Weather Underground and most weather sites
-// forbid iframe embedding; Windy's embed is built for it).
-function radarUrl(weather) {
-  if (weather.radarUrl) return weather.radarUrl
-  const { latitude: lat, longitude: lon } = weather
-  return `https://embed.windy.com/embed2.html?lat=${lat}&lon=${lon}&detailLat=${lat}&detailLon=${lon}` +
-    '&zoom=8&level=surface&overlay=radar&menu=&message=true&calendar=now&type=map' +
-    '&location=coordinates&metricWind=mph&metricTemp=%C2%B0F'
-}
-
 export default async function apiRoutes(app, { config, state, db }) {
   const photosDir = path.join(path.dirname(config.db), 'photos')
   fs.mkdirSync(photosDir, { recursive: true })
@@ -865,8 +855,7 @@ export default async function apiRoutes(app, { config, state, db }) {
 
   // ---- Weather ----
   app.get('/api/weather', async () => ({
-    ...(state.weather ?? { current: null, daily: [] }),
-    radarUrl: radarUrl(config.weather ?? {})
+    ...(state.weather ?? { current: null, daily: [] })
   }))
 
   // ---- Ring doorbell ----

@@ -511,30 +511,7 @@ body {
 .forecast-temps { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 .forecast-temps b { color: var(--ink); font-weight: 800; }
 
-.forecast-panel { cursor: pointer; }
 .mood-hint { color: var(--muted); }
-
-/* ---- Radar ---- */
-.radar-view {
-  background: var(--panel-solid);
-  border-radius: 22px;
-  box-shadow: 0 20px 60px rgba(10, 30, 50, 0.35);
-  width: 94vw;
-  height: 92vh;
-  padding: 2vh 1.4vw;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.radar-frame {
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  border: none;
-  border-radius: 14px;
-  background: var(--inset);
-}
 
 /* ---- Overlays (month view, photo manager) ---- */
 .overlay {

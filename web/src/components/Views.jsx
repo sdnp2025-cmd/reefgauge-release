@@ -53,14 +53,13 @@ export function TankView({ onBack, onEquipment }) {
 }
 
 
-export function WeatherView({ onBack, onRadar }) {
+export function WeatherView({ onBack }) {
   return (
     <DetailView
       title="Weather"
       onBack={onBack}
-      action={<button className="view-btn" onClick={onRadar}>Radar ›</button>}
     >
-      <WeatherPanel variant="forecast" onOpenRadar={onRadar} />
+      <WeatherPanel variant="forecast" />
     </DetailView>
   )
 }

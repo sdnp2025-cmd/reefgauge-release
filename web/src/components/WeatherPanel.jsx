@@ -14,7 +14,7 @@ export function weatherMood(code, tempF) {
   return 'cloudy'
 }
 
-export default function WeatherPanel({ variant, onOpenRadar }) {
+export default function WeatherPanel({ variant }) {
   const [data] = usePolling('/api/weather', 10 * 60 * 1000)
 
   if (variant === 'current') {
@@ -43,8 +43,8 @@ export default function WeatherPanel({ variant, onOpenRadar }) {
   const mood = today ? weatherMood(today.code, today.high) : 'cloudy'
 
   return (
-    <div className={`panel forecast-panel mood-${mood}`} onClick={onOpenRadar} role="button" aria-label="Open local radar">
-      <h2>⛅ Forecast <span className="tap-hint mood-hint">tap for radar</span></h2>
+    <div className={`panel forecast-panel mood-${mood}`}>
+      <h2>Forecast</h2>
       {!days.length && <div className="empty-note">Waiting for forecast…</div>}
       <div className="forecast">
         {days.map((d, i) => {
