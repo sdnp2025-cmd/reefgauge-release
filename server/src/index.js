@@ -249,4 +249,21 @@ pruneOldReadings(db)
 setInterval(() => pruneOldReadings(db), 24 * 3600 * 1000)
 
 await app.listen({ port: config.port ?? 8080, host: '0.0.0.0' })
+
+// An update asks for the display to be reloaded by leaving a marker beside the
+// database (scripts/update.sh). It cannot do it itself: it is a child of the
+// previous server process and dies with it. By the time this runs the new
+// dashboard is on disk and this process is the one serving it, so the kiosk's
+// own start-up wait finds a healthy server and loads the new bundle. The request
+// goes through the existing restart route so the user-versus-system kiosk logic
+// lives in one place; inject() arrives as localhost and is auth-exempt.
+try {
+  const reloadMarker = path.join(path.dirname(config.db), '.reload-display')
+  if (fs.existsSync(reloadMarker)) {
+    fs.rmSync(reloadMarker, { force: true })
+    setTimeout(() => {
+      app.inject({ method: 'POST', url: '/api/system/restart/display' }).catch(() => {})
+    }, 3000)
+  }
+} catch { /* a reload is a courtesy; it must never stop the server starting */ }
 console.log(`ReefGauge server listening on http://0.0.0.0:${config.port ?? 8080}`)
