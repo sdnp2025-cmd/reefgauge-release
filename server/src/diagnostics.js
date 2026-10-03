@@ -432,10 +432,12 @@ function display(state) {
 }
 
 export async function collect({ config, state, db, dataDir, repoRoot }) {
-  const [p, t, s, svc, net, upd] = await Promise.all([
+  const [p, t, s, svc, net, upd, gfx] = await Promise.all([
     power(), thermal(), storage(dataDir), services(repoRoot), network(), updates(repoRoot), display(state)
   ])
-  const checks = [...p, ...t, ...svc, ...net, ...integrations(state, config, db), ...s, ...configuration(config, state), ...upd]
+  // gfx was added to the Promise.all above and not to this destructuring, so it was
+  // computed on every report and thrown away. Destructuring drops extras silently.
+  const checks = [...p, ...t, ...svc, ...gfx, ...net, ...integrations(state, config, db), ...s, ...configuration(config, state), ...upd]
 
   let version = 'dev'
   try { version = fs.readFileSync(path.join(repoRoot, 'VERSION'), 'utf8').trim() } catch { /* not packaged */ }
