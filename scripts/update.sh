@@ -173,4 +173,16 @@ echo "==> Restarting services"
 sudo systemctl restart co2-daemon.service 2>/dev/null || true
 sudo systemctl restart reef-server.service
 
+# And the screen. The server coming back does not make Chromium reload the page
+# it already has, so a rebuilt dashboard was not what the customer saw until the
+# next reboot - an update that visibly did nothing. The first unit set up from the
+# 0.7.17 master took a fix for exactly the overlay it was showing and kept
+# showing the old one. Both kiosk forms are tried; sudoers grants the system one
+# and the user one needs no sudo. About ten seconds of dark screen, which the
+# update panel has already said to expect.
+echo "==> Reloading the display"
+sudo -n systemctl restart reef-kiosk.service 2>/dev/null \
+  || systemctl --user restart reef-kiosk.service 2>/dev/null \
+  || echo "    (kiosk not restarted - it will show the new dashboard after the next reboot)"
+
 echo "==> Update complete: $(cat VERSION) ($(git rev-parse --short HEAD))"
