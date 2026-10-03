@@ -46,6 +46,7 @@ const state = {
   environment: null,
   weather: null,
   ring: { camera: null, lastDing: null, snapshotAt: null, error: null },
+  display: null,   // what the kiosk's browser reported it can draw; see diagnostics display()
 }
 
 // Everything else in `state` that is a wall-clock instant. Each of these is

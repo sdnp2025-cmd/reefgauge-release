@@ -22,6 +22,24 @@ function radarUrl(weather) {
 export default async function apiRoutes(app, { config, state, db }) {
   const photosDir = path.join(path.dirname(config.db), 'photos')
   fs.mkdirSync(photosDir, { recursive: true })
+  // What the kiosk's browser can actually draw, reported by the dashboard when it
+  // loads. A support operator cannot open chrome://gpu on a sealed unit, and the
+  // first visible symptom of a GPU problem was the weather radar failing while
+  // everything else drew fine. Kept in memory; the body is bounded.
+  app.post('/api/display/capabilities', async (req) => {
+    const b = req.body ?? {}
+    const str = (v, n) => (typeof v === 'string' ? v.slice(0, n) : null)
+    state.display = {
+      webgl: b.webgl === 'webgl2' || b.webgl === 'webgl' ? b.webgl : false,
+      renderer: str(b.renderer, 120),
+      vendor: str(b.vendor, 80),
+      userAgent: str(b.userAgent, 200),
+      viewport: str(b.viewport, 20),
+      reportedAt: Date.now()
+    }
+    return { ok: true }
+  })
+
   // ---- Ranges ----
   //
   // The numbers every alarm on this terminal is measured against, and until

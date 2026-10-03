@@ -410,9 +410,30 @@ async function updates(repoRoot) {
     behind && !head.startsWith(behind.slice(0, 7)) ? `An update is available (${behind}).` : 'Up to date with the remote.')]
 }
 
+// ---- display graphics -------------------------------------------------------
+// Reported by the dashboard itself on load (POST /api/display/capabilities), so
+// it describes the kiosk's real browser under cage - not a headless probe, which
+// would answer for SwiftShader. Nothing else on a sealed unit can say whether
+// the GPU is in use; the first symptom was the radar.
+function display(state) {
+  const d = state?.display
+  if (!d) {
+    return [check('gfx', 'Display graphics', 'unknown', 'not reported yet',
+      'The dashboard reports this when it loads. A unit that never has, has not drawn the dashboard since boot.')]
+  }
+  const r = (d.renderer || '').toLowerCase()
+  const software = /swiftshader|llvmpipe|softpipe|software/.test(r)
+  const status = !d.webgl ? 'fail' : software ? 'warn' : 'ok'
+  const value = d.webgl ? `${d.webgl}: ${d.renderer || 'renderer not exposed'}` : 'WebGL unavailable'
+  return [check('gfx', 'Display graphics', status, value,
+    !d.webgl ? 'The browser has no WebGL. Anything drawn with it - the weather radar - fails while the rest of the dashboard looks normal.'
+      : software ? 'WebGL is running in software rather than on the GPU: it works, slowly, and heavy pages may give up.' : null,
+    status === 'ok' ? null : 'Check the kiosk user is in the render and video groups, /dev/dri exists, and chromium was not started with --disable-gpu.')]
+}
+
 export async function collect({ config, state, db, dataDir, repoRoot }) {
   const [p, t, s, svc, net, upd] = await Promise.all([
-    power(), thermal(), storage(dataDir), services(repoRoot), network(), updates(repoRoot)
+    power(), thermal(), storage(dataDir), services(repoRoot), network(), updates(repoRoot), display(state)
   ])
   const checks = [...p, ...t, ...svc, ...net, ...integrations(state, config, db), ...s, ...configuration(config, state), ...upd]
 

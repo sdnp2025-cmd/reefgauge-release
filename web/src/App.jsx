@@ -99,6 +99,26 @@ export default function App() {
   useEffect(() => {
     if (phoneHandoff) return
     fetch('/api/setup/status').then((r) => r.json()).then(setSetupStatus).catch(() => setSetupStatus({ complete: true }))
+    // Tell the server what this browser can draw (see diagnostics display()). The
+    // kiosk is the only place this answer is true for the kiosk; a probe must never
+    // be able to break the dashboard, hence the try and the swallowed catch.
+    try {
+      const c = document.createElement('canvas')
+      const gl2 = c.getContext('webgl2')
+      const gl = gl2 || c.getContext('webgl')
+      const dbg = gl && gl.getExtension('WEBGL_debug_renderer_info')
+      fetch('/api/display/capabilities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          webgl: gl2 ? 'webgl2' : gl ? 'webgl' : false,
+          renderer: gl ? gl.getParameter(dbg ? dbg.UNMASKED_RENDERER_WEBGL : gl.RENDERER) : null,
+          vendor: gl && dbg ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) : null,
+          userAgent: navigator.userAgent,
+          viewport: `${window.innerWidth}x${window.innerHeight}`
+        })
+      }).catch(() => {})
+    } catch { /* never let a probe break the dashboard */ }
   }, [phoneHandoff])
 
   // The nonce in ?rt= decides what the phone page can do, so this branch is
