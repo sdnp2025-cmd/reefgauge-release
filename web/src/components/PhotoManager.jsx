@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { api, usePolling } from '../api.js'
 
 // No emoji anywhere on the kiosk — the Pi image has no colour-emoji font.
@@ -31,25 +31,12 @@ function PhoneQr() {
 
 export default function PhotoManager({ onClose }) {
   const [data, refetch] = usePolling('/api/photos', 30000)
-  const [busy, setBusy] = useState(false)
   const [qrOpen, setQrOpen] = useState(false)
-  const fileInput = useRef(null)
   const photos = data?.photos ?? []
 
-  const upload = async (e) => {
-    const files = [...e.target.files]
-    if (!files.length) return
-    setBusy(true)
-    try {
-      const form = new FormData()
-      for (const f of files) form.append('photos', f)
-      await api('/api/photos', { method: 'POST', body: form })
-      refetch()
-    } finally {
-      setBusy(false)
-      e.target.value = ''
-    }
-  }
+  // One way in, from the phone. There used to be a second button that opened the
+  // browser's file picker on the kiosk itself - a wall panel with no files on it
+  // and no way to get any there. A customer could only ever use the QR route.
 
   const remove = async (photo) => {
     await api(`/api/photos/${encodeURIComponent(photo.name)}`, { method: 'DELETE' })
@@ -65,9 +52,6 @@ export default function PhotoManager({ onClose }) {
             <button className={qrOpen ? 'active' : ''} onClick={() => setQrOpen(!qrOpen)}>
               {qrOpen ? 'Hide code' : 'Add from phone'}
             </button>
-            <button onClick={() => fileInput.current?.click()} disabled={busy}>
-              {busy ? 'Uploading…' : '＋ Add photos'}
-            </button>
             <button className="month-close" onClick={onClose} aria-label="Close">✕</button>
           </div>
         </div>
@@ -76,8 +60,7 @@ export default function PhotoManager({ onClose }) {
           Photos rotate as a full-screen slideshow when the display is idle.
           Add them from any phone with “Add from phone”.
         </p>
-        <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={upload} />
-        {!photos.length && <div className="empty-note">No photos yet — add some!</div>}
+        {!photos.length && <div className="empty-note">No photos yet — tap “Add from phone” and scan the code.</div>}
         <div className="photo-grid">
           {photos.map((p) => (
             <div key={p.name} className="photo-thumb">
