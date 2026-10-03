@@ -35,6 +35,7 @@ export default async function apiRoutes(app, { config, state, db }) {
       vendor: str(b.vendor, 80),
       userAgent: str(b.userAgent, 200),
       viewport: str(b.viewport, 20),
+    error: str(b.error, 500),
       reportedAt: Date.now()
     }
     return { ok: true }

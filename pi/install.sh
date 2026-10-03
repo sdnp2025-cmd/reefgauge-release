@@ -429,7 +429,11 @@ if [ "${1:-}" = "--factory" ]; then
   # afternoon; the pattern is the bug, not the command.
   for unit in apt-daily.service apt-daily.timer \
               apt-daily-upgrade.service apt-daily-upgrade.timer \
-              rpi-resize-swap-file.service; do
+              rpi-resize-swap-file.service \
+              logrotate.service logrotate.timer \
+              man-db.service man-db.timer \
+              dpkg-db-backup.service dpkg-db-backup.timer \
+              e2scrub_all.service e2scrub_all.timer e2scrub_reap.service; do
     if ! sudo systemctl list-unit-files "$unit" --no-legend 2>/dev/null | grep -q .; then
       echo "    $unit: not present on this image, skipping"
       continue

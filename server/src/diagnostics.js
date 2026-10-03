@@ -181,12 +181,24 @@ async function services(repoRoot) {
     .split('\n')
     .map((l) => l.trim().split(/\s+/)[0])
     .filter((n) => n && n.endsWith('.service'))
+
+  // A few housekeeping jobs keep their state under /var/lib or /var/cache and so
+  // cannot run on a sealed unit. Newer images mask them; 0.7.17 does not, and
+  // logrotate went red on the first unit's first midnight. They are named, not
+  // hidden - but a report that is permanently red teaches people to ignore it.
+  const HOUSEKEEPING = new Set(['logrotate.service', 'man-db.service', 'dpkg-db-backup.service',
+    'e2scrub_all.service', 'e2scrub_reap.service', 'apt-daily.service', 'apt-daily-upgrade.service'])
+  const sealedRoot = /^ro(,|$)/.test((await run('findmnt', ['-no', 'OPTIONS', '/'])) ?? '')
+  const ignored = sealedRoot ? names.filter((n) => HOUSEKEEPING.has(n)) : []
+  const real = names.filter((n) => !ignored.includes(n))
   out.push(check('svc:failed', 'System services',
-    names.length === 0 ? 'ok' : 'fail',
-    names.length === 0 ? 'none failed' : `${names.length} failed: ${names.join(', ')}`,
-    names.length ? 'systemd could not start these. Boot shows them in red, and the '
+    real.length === 0 ? 'ok' : 'fail',
+    real.length === 0
+      ? (ignored.length ? `none failed (${ignored.join(', ')} cannot run on a read-only root; masked in newer images)` : 'none failed')
+      : `${real.length} failed: ${real.join(', ')}`,
+    real.length ? 'systemd could not start these. Boot shows them in red, and the '
                  + 'ReefGauge splash is replaced by the message scroll.' : null,
-    names.length ? 'On a sealed unit this is normally a service writing under '
+    real.length ? 'On a sealed unit this is normally a service writing under '
                  + '/var/lib, which the read-only root refuses. `systemctl status '
                  + '<unit>` names the path.' : null))
 
@@ -415,7 +427,7 @@ async function updates(repoRoot) {
 // it describes the kiosk's real browser under cage - not a headless probe, which
 // would answer for SwiftShader. Nothing else on a sealed unit can say whether
 // the GPU is in use; the first symptom was the radar.
-function display(state) {
+async function display(state) {
   const d = state?.display
   if (!d) {
     return [check('gfx', 'Display graphics', 'unknown', 'not reported yet',
@@ -425,10 +437,28 @@ function display(state) {
   const software = /swiftshader|llvmpipe|softpipe|software/.test(r)
   const status = !d.webgl ? 'fail' : software ? 'warn' : 'ok'
   const value = d.webgl ? `${d.webgl}: ${d.renderer || 'renderer not exposed'}` : 'WebGL unavailable'
+  if (status === 'ok') return [check('gfx', 'Display graphics', 'ok', value)]
+
+  // What this process can see of the GL stack, because "unavailable" on its own
+  // sends someone to a unit they cannot log into. Each of these is a separate
+  // way for the GPU path to be missing on a Lite image.
+  const facts = []
+  const dri = await run('sh', ['-c', 'ls /dev/dri 2>/dev/null | tr "\\n" " "'])
+  facts.push(`/dev/dri: ${dri?.trim() || 'MISSING'}`)
+  facts.push(`groups: ${(await run('id', ['-nG']))?.trim() ?? '?'}`)
+  const drv = await run('sh', ['-c', 'ls /usr/lib/aarch64-linux-gnu/dri 2>/dev/null | grep -ciE "v3d|vc4|gallium"'])
+  facts.push(`mesa dri drivers matching v3d/vc4/gallium: ${drv?.trim() ?? '0'}`)
+  for (const pkg of ['libgl1-mesa-dri', 'libegl1', 'libgles2', 'libgbm1']) {
+    const st = await run('dpkg-query', ['-W', '-f=${Status}', pkg])
+    facts.push(`${pkg}: ${st?.includes('install ok installed') ? 'installed' : 'NOT installed'}`)
+  }
+  const why = d.error ? ` Chromium said: ${d.error}` : ''
   return [check('gfx', 'Display graphics', status, value,
-    !d.webgl ? 'The browser has no WebGL. Anything drawn with it - the weather radar - fails while the rest of the dashboard looks normal.'
-      : software ? 'WebGL is running in software rather than on the GPU: it works, slowly, and heavy pages may give up.' : null,
-    status === 'ok' ? null : 'Check the kiosk user is in the render and video groups, /dev/dri exists, and chromium was not started with --disable-gpu.')]
+    (!d.webgl
+      ? 'The browser has no WebGL. Anything drawn with it - the weather radar - fails while the rest of the dashboard looks normal.'
+      : 'WebGL is running in software rather than on the GPU: it works, slowly, and heavy pages may give up.')
+      + why + ' | ' + facts.join(' | '),
+    'reefgauge logs <unit> --unit display shows what Chromium and cage printed when the GPU did not start.')]
 }
 
 export async function collect({ config, state, db, dataDir, repoRoot }) {

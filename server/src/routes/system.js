@@ -275,7 +275,10 @@ export default async function systemRoutes(app, { config, state, db, support }) 
   })
 
   app.get('/api/system/logs', async (req, reply) => {
-    const units = { server: 'reef-server.service', sensor: 'co2-daemon.service' }
+    // display: the kiosk's journal is where Chromium and cage say why the GPU did not
+    // start. Without it a 'WebGL unavailable' report had no explanation reachable
+    // from outside a sealed unit.
+    const units = { server: 'reef-server.service', sensor: 'co2-daemon.service', display: 'reef-kiosk.service' }
     // 'boot' is this boot's warnings and errors from every unit, not just ours.
     //
     // Without it a support operator cannot see why a unit shows red [FAILED]

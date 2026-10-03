@@ -104,6 +104,10 @@ export default function App() {
     // be able to break the dashboard, hence the try and the swallowed catch.
     try {
       const c = document.createElement('canvas')
+      // Chromium says why a context could not be created through this event, and
+      // nowhere else that a sealed unit can be asked.
+      let glError = null
+      c.addEventListener('webglcontextcreationerror', (e) => { glError = e.statusMessage || 'no message' })
       const gl2 = c.getContext('webgl2')
       const gl = gl2 || c.getContext('webgl')
       const dbg = gl && gl.getExtension('WEBGL_debug_renderer_info')
@@ -115,7 +119,8 @@ export default function App() {
           renderer: gl ? gl.getParameter(dbg ? dbg.UNMASKED_RENDERER_WEBGL : gl.RENDERER) : null,
           vendor: gl && dbg ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) : null,
           userAgent: navigator.userAgent,
-          viewport: `${window.innerWidth}x${window.innerHeight}`
+          viewport: `${window.innerWidth}x${window.innerHeight}`,
+          error: glError
         })
       }).catch(() => {})
     } catch { /* never let a probe break the dashboard */ }
