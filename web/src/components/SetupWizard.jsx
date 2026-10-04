@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { api, waitForSetupComplete } from '../api.js'
 import OnScreenKeyboard from './OnScreenKeyboard.jsx'
 import UpdatePanel from './UpdatePanel.jsx'
@@ -14,7 +14,23 @@ const Ico = {
   gear: <svg {...S} className="ico"><circle cx="12" cy="12" r="4" /><path d="M12 2v3" /><path d="M12 19v3" /><path d="M2 12h3" /><path d="M19 12h3" /><path d="M4.9 4.9 7 7" /><path d="M17 17l2.1 2.1" /><path d="M19.1 4.9 17 7" /><path d="M7 17l-2.1 2.1" /></svg>
 }
 
-const STEPS = ['Welcome', 'Wi-Fi', 'Location', 'Tank name', 'Apex', 'Equipment', 'Finish']
+const STEPS = ['Welcome', 'Wi-Fi', 'Location', 'Register', 'Apex', 'Equipment', 'Finish']
+
+// Registration has no dot of its own when opened from Settings: step 3 there
+// is still "Tank name" alone, and this number is past the end of STEPS.
+export const REGISTER_SECTION = 7
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
+// The same rules the server applies (server/src/registration.js); checked
+// here first so the customer is told which field, on the screen they are on.
+function registrationProblem({ firstName, lastName, email, phone }) {
+  if (!firstName.trim()) return 'Please enter your first name.'
+  if (!lastName.trim()) return 'Please enter your last name.'
+  if (!EMAIL_RE.test(email.trim())) return 'That email address does not look right — check it and try again.'
+  const digits = phone.replace(/\D/g, '').length
+  if (digits < 10 || digits > 15) return 'Please enter a phone number with its area code.'
+  return null
+}
 
 function signalBars(signal) {
   return signal >= 75 ? '▂▄▆█' : signal >= 50 ? '▂▄▆' : signal >= 25 ? '▂▄' : '▂'
@@ -59,9 +75,17 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
   const [gearIp, setGearIp] = useState('')
   const [tankName, setTankName] = useState('')
 
+  // Registration step state
+  const [regFirst, setRegFirst] = useState('')
+  const [regLast, setRegLast] = useState('')
+  const [regEmail, setRegEmail] = useState('')
+  const [regPhone, setRegPhone] = useState('')
+  const [regLoaded, setRegLoaded] = useState(false)
+  const cardRef = useRef(null)
+
   // Which text field the on-screen keyboard is editing
   const [kbTarget, setKbTarget] = useState(null)
-  const kbSetters = { wifiPassword: setWifiPassword, locQuery: setLocQuery, apexHost: setApexHost, apexUser: setApexUser, apexPass: setApexPass, gearIp: setGearIp, tankName: setTankName }
+  const kbSetters = { wifiPassword: setWifiPassword, locQuery: setLocQuery, apexHost: setApexHost, apexUser: setApexUser, apexPass: setApexPass, gearIp: setGearIp, tankName: setTankName, regFirst: setRegFirst, regLast: setRegLast, regEmail: setRegEmail, regPhone: setRegPhone }
   // `gearName:<hwid>` targets one device's nickname, so the keyboard can edit a
   // field that doesn't have its own useState.
   const kbSetter = (target) => {
@@ -245,7 +269,42 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
     window.location.replace('/')
   })
 
+  const onRegister = step === REGISTER_SECTION || (step === 3 && !single)
+
+  const saveRegistration = () => {
+    const reg = { firstName: regFirst, lastName: regLast, email: regEmail, phone: regPhone }
+    const problem = registrationProblem(reg)
+    if (problem) { setError(problem); return }
+    const name = tankName.trim()
+    setAnswers((a) => ({
+      ...a,
+      registration: { firstName: regFirst.trim(), lastName: regLast.trim(), email: regEmail.trim(), phone: regPhone.trim() },
+      // Optional. Left out when blank so a tank already named keeps its name.
+      ...(name && !single ? { tankName: name } : {})
+    }))
+    next()
+  }
+
+  // The keyboard covers the bottom of the card, and this form is taller than
+  // what is left. Bring the field being typed into back into view.
   useEffect(() => {
+    if (!onRegister || !kbTarget) return
+    cardRef.current?.querySelector('.setup-input.focused')?.scrollIntoView({ block: 'center' })
+  }, [kbTarget, onRegister])
+
+  useEffect(() => {
+    // Re-running setup, or opening Registration from Settings: show what is
+    // already on file rather than an empty form.
+    if (onRegister && !regLoaded) {
+      setRegLoaded(true)
+      api('/api/setup/registration').then(({ registration: r }) => {
+        if (!r) return
+        setRegFirst((v) => v || r.firstName || '')
+        setRegLast((v) => v || r.lastName || '')
+        setRegEmail((v) => v || r.email || '')
+        setRegPhone((v) => v || r.phone || '')
+      }).catch(() => {})
+    }
     if (step === 3 && !tankName) api('/api/tank/latest').then((d) => { if (d?.name && d.name !== 'Reef Tank') setTankName(d.name) }).catch(() => {})
     if (step === 4 && apexCurrent == null) loadApex()
     if (step === 1 && networks == null) scanWifi()
@@ -291,8 +350,8 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
   }
 
   return (
-    <div className="setup">
-      <div className="setup-card">
+    <div className={`setup ${onRegister && kbTarget ? 'kb-open' : ''}`}>
+      <div className="setup-card" ref={cardRef}>
         {!single && <div className="setup-progress">
           {STEPS.map((label, i) => (
             <div key={label} className={`setup-dot ${i === step ? 'active' : ''} ${i < step ? 'done' : ''}`}>
@@ -378,7 +437,47 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
           </div>
         )}
 
-        {step === 3 && (
+        {onRegister && (
+          <div className="setup-body">
+            <h1>Register your ReefGauge</h1>
+            <p>So we can reach you about support and updates for this terminal.</p>
+            <div className="setup-form">
+              <label className="setup-field">
+                <span>First name</span>
+                <input {...fieldProps('regFirst', regFirst)} maxLength={60} />
+              </label>
+              <label className="setup-field">
+                <span>Last name</span>
+                <input {...fieldProps('regLast', regLast)} maxLength={60} />
+              </label>
+              <label className="setup-field">
+                <span>Email address</span>
+                <input {...fieldProps('regEmail', regEmail)} maxLength={120} />
+              </label>
+              <label className="setup-field">
+                <span>Phone number</span>
+                <input {...fieldProps('regPhone', regPhone)} maxLength={30} />
+              </label>
+              {!single && (
+                <label className="setup-field wide">
+                  <span>Reef tank name <em>optional</em></span>
+                  <input {...fieldProps('tankName', tankName)} placeholder={'"The 120", "Living room reef"…'} maxLength={40} />
+                </label>
+              )}
+            </div>
+            <div className="setup-privacy">
+              {Ico.lock}
+              <span>
+                <b>Your information is kept confidential.</b> It is never sold and never
+                disclosed to anyone outside ReefGauge.
+              </span>
+            </div>
+            <button className="setup-primary" onClick={() => { setKbTarget(null); saveRegistration() }}>{single ? 'Save' : 'Continue'}</button>
+            {single && <button className="setup-skip" onClick={onExit}>Close without changing</button>}
+          </div>
+        )}
+
+        {step === 3 && single && (
           <div className="setup-body">
             <h1>Name your tank</h1>
             <p>It goes at the top of every screen. "The 120", "Living room reef", whatever you call it.</p>
@@ -522,6 +621,7 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
                 <h1>All set!</h1>
                 <div className="setup-summary">
                   <div>{Ico.wifi} Wi-Fi: <b>{wifiOk ?? 'skipped'}</b></div>
+                  <div>{Ico.lock} Registered to: <b>{answers.registration ? `${answers.registration.firstName} ${answers.registration.lastName}` : 'not registered'}</b></div>
                   <div>{Ico.pin} Location: <b>{answers.location?.label ?? 'skipped'}</b></div>
                   <div>{Ico.flask} Tank: <b>{answers.tankName ?? 'unnamed'}</b></div>
                   <div>{Ico.flask} Apex: <b>{answers.apex?.host ?? 'skipped'}</b></div>
@@ -554,6 +654,7 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
           onSubmit={() => setKbTarget(null)}
           onClose={() => setKbTarget(null)}
           submitLabel="Done"
+          extraKeys={kbTarget === 'regEmail' ? ['@', '.', '.com'] : []}
         />
       )}
     </div>

@@ -11,7 +11,9 @@ const LAYOUTS = {
   sym: ['1234567890', '!@#$%^&*()', '-_=+[]{}|\\', ';:\'",.?/~`']
 }
 
-export default function OnScreenKeyboard({ onKey, onBackspace, onSubmit, onClose, submitLabel = 'Add' }) {
+// `extraKeys` puts a few keys on the bottom row for the field being edited -
+// an email address is misery if @ and . are both a layer away.
+export default function OnScreenKeyboard({ onKey, onBackspace, onSubmit, onClose, submitLabel = 'Add', extraKeys = [] }) {
   const [layer, setLayer] = useState('abc')
   const [shift, setShift] = useState('off') // off → once → lock → off
 
@@ -46,6 +48,9 @@ export default function OnScreenKeyboard({ onKey, onBackspace, onSubmit, onClose
         <button className="osk-key osk-mod" onClick={() => setLayer((l) => (l === 'abc' ? 'sym' : 'abc'))}>
           {layer === 'abc' ? '?#+' : 'ABC'}
         </button>
+        {extraKeys.map((k) => (
+          <button key={k} className="osk-key osk-extra" onClick={() => onKey(k)}>{k}</button>
+        ))}
         <button className="osk-key osk-space" onClick={() => press(' ')}>space</button>
         <button className="osk-key" onClick={onBackspace}>⌫</button>
         <button className="osk-key osk-close" onClick={onClose}>✕</button>

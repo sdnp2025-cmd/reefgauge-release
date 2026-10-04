@@ -61,6 +61,9 @@ export default async function systemRoutes(app, { config, state, db, support }) 
     if (redacted.apex) delete redacted.apex.password
     if (redacted.alerts) delete redacted.alerts.ntfyTopic
     delete redacted.google
+    // The owner's name, email and phone. The registration screen promises
+    // these are not disclosed, and nothing about a unit's health needs them.
+    delete redacted.registration
     const logs = {}
     for (const unit of ['reef-server.service', 'co2-daemon.service']) {
       try {

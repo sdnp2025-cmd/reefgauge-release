@@ -20,6 +20,7 @@ import coralRoutes from './routes/corals.js'
 import careRoutes from './routes/care.js'
 import systemRoutes from './routes/system.js'
 import { createSupportSession } from './supportSession.js'
+import { startRegistrationDelivery } from './registration.js'
 import { seedDemo } from './demo.js'
 import { authorize as authorizePhone } from './phoneSession.js'
 
@@ -266,4 +267,5 @@ try {
     }, 3000)
   }
 } catch { /* a reload is a courtesy; it must never stop the server starting */ }
+startRegistrationDelivery({ config, log: app.log })
 console.log(`ReefGauge server listening on http://0.0.0.0:${config.port ?? 8080}`)

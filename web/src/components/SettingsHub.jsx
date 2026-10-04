@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { api, waitForServer } from '../api.js'
 import { useDragScroll } from '../dragScroll.js'
-import SetupWizard from './SetupWizard.jsx'
+import SetupWizard, { REGISTER_SECTION } from './SetupWizard.jsx'
 import PhotoManager from './PhotoManager.jsx'
 import UpdatePanel from './UpdatePanel.jsx'
 import AlarmSettings from './AlarmSettings.jsx'
@@ -84,6 +84,7 @@ const SECTIONS = [
   },
   { id: 'location', step: 2, icon: 'pin', title: 'Location', line: (s) => s.location ?? 'Not set — weather is guessing', bad: (s) => !s.location },
   { id: 'name', step: 3, icon: 'tag', title: 'Tank name', line: (s) => s.tankName ?? 'Not named yet — tap to name it', bad: (s) => !s.tankName },
+  { id: 'registration', step: REGISTER_SECTION, icon: 'tag', title: 'Registration', line: (s) => (s.registered ? 'Registered — tap to update your details' : 'Not registered — tap to register'), bad: (s) => !s.registered },
   { id: 'apex', step: 4, icon: 'flask', title: 'Apex controller', line: (s) => s.apex ?? 'No controller set', bad: (s) => !s.apex },
   {
     id: 'probes',

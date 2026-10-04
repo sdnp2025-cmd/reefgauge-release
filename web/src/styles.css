@@ -797,6 +797,30 @@ body {
 
 .setup-inline { display: flex; gap: 0.8vw; }
 
+/* Registration: labelled fields, two to a row */
+.setup-form { display: grid; grid-template-columns: 1fr 1fr; gap: 1.4vh 1vw; }
+.setup-field { display: flex; flex-direction: column; gap: 0.5vh; min-width: 0; }
+.setup-field.wide { grid-column: 1 / -1; }
+.setup-field > span { font-size: 1.7vh; font-weight: 700; color: var(--ink-2); }
+.setup-field > span em { font-style: normal; font-weight: 600; color: var(--muted); margin-left: 0.4vw; }
+.setup-privacy {
+  display: flex;
+  align-items: center;
+  gap: 1vw;
+  background: var(--inset);
+  border-radius: 12px;
+  padding: 1.4vh 1.2vw;
+  font-size: 2.1vh;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.setup-privacy .ico { font-size: 3vh; color: var(--ok); }
+.setup-privacy b { color: var(--ink); }
+/* With the keyboard up, the card sits above it instead of behind it. */
+.setup.kb-open { align-items: flex-start; }
+.setup.kb-open .setup-card { max-height: 56vh; margin-top: 1vh; }
+.osk-extra { max-width: 9vw; flex: 1.2; font-size: 2.2vh; }
+
 .setup-params {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

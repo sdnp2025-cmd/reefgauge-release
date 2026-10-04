@@ -19,6 +19,7 @@ import { mintSession, sessionFor, isLocalRequest, SESSION_TTL_MS } from '../phon
 import { lanIp } from '../lan.js'
 import { DOSING_METHODS, methodFor } from '../dosingMethods.js'
 import { saveConfigAtomic } from '../config.js'
+import { validateRegistration } from '../registration.js'
 
 const exec = promisify(execFile)
 
@@ -502,6 +503,10 @@ async function connectWifi(ssid, password) {
   // is set to right now — a settings list that only shows names makes you open
   // every card to find the one that is wrong, which is the whole reason the
   // old wizard-from-the-top felt like a punishment.
+  // The owner's details, for the wizard to show back to them. Not on the
+  // support allowlist (supportSession.js), so it answers the glass only.
+  app.get('/api/setup/registration', async () => ({ registration: config.registration ?? null }))
+
   app.get('/api/setup/summary', async () => {
     const wifi = await wifiStatus()
     const online = cachedOnline()
@@ -518,6 +523,8 @@ async function connectWifi(ssid, password) {
           ? `${Number(config.weather.latitude).toFixed(2)}, ${Number(config.weather.longitude).toFixed(2)}`
           : null),
       tankName: config.tankName ?? null,
+      // Whether, not who: this summary is readable in a support session.
+      registered: Boolean(config.registration?.email),
       apex: config.apex?.host || null,
       equipment: {
         enabled: config.redSea?.enabled !== false,
@@ -607,6 +614,13 @@ async function connectWifi(ssid, password) {
     if (typeof answers.tankName === 'string') {
       const name = answers.tankName.trim().slice(0, 40)
       if (name) next.tankName = name
+    }
+    // Registration. Validated here rather than trusted from the wizard, because
+    // this endpoint is also reachable from a support session.
+    if (answers.registration) {
+      const { value, error } = validateRegistration(answers.registration)
+      if (error) return reply.code(400).send({ error })
+      next.registration = { ...value, registeredAt: next.registration?.registeredAt ?? new Date().toISOString() }
     }
     if (answers.location) {
       next.weather = { ...next.weather, latitude: answers.location.latitude, longitude: answers.location.longitude, label: answers.location.label ?? next.weather?.label }
