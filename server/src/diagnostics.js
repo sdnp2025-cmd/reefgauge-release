@@ -19,6 +19,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { cardSerial } from './registration.js'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
@@ -494,6 +495,7 @@ export async function collect({ config, state, db, dataDir, repoRoot }) {
     generatedAt: Date.now(),
     identity: {
       tankName: config.tankName || null,
+      serial: cardSerial(),
       version,
       commit,
       model,

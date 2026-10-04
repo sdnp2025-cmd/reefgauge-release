@@ -49,6 +49,19 @@ function unitId(config) {
   return crypto.createHash('sha256').update(String(config.apiToken ?? '')).digest('hex').slice(0, 16)
 }
 
+// The serial number the Command Center wrote onto the card when it was flashed
+// (tools/card-writer/write_helper.py). It is how a registration is matched to
+// the card that was made for it; a card flashed any other way has none.
+export function cardSerial() {
+  for (const file of ['/boot/firmware/reefgauge-serial', '/boot/reefgauge-serial']) {
+    try {
+      const s = fs.readFileSync(file, 'utf8').trim()
+      if (/^[A-Z0-9][A-Z0-9-]{3,31}$/.test(s)) return s
+    } catch { /* not stamped */ }
+  }
+  return null
+}
+
 function endpoint(config) {
   if (config.registrationUrl) return config.registrationUrl
   const relay = config.support?.relay
@@ -70,6 +83,7 @@ export function startRegistrationDelivery({ config, log }) {
     if (!reg || !url) return
     const body = {
       unitId: unitId(config),
+      serial: cardSerial(),
       firstName: reg.firstName,
       lastName: reg.lastName,
       email: reg.email,
