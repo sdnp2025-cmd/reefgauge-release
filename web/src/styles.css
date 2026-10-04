@@ -1882,6 +1882,15 @@ body {
   align-items: center;
   gap: 0.4vh;
 }
+/* The settings list has to fit the 1024x600 panel whole: a list that scrolls
+   by a few pixels reads as a screen that is cut off. So it takes nearly the
+   full glass, the rows are a little shorter, and the footer is one line. */
+.setup-card.hub-shell { width: min(96vw, 1100px); max-height: 97vh; padding: 2.2vh 2.4vw; }
+.hub-shell .hub-head { margin-bottom: 1.4vh; }
+.hub-shell .hub-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.hub-shell .hub-card { padding: 1.15vh 1.4vw; min-width: 0; }
+.hub-shell .hub-foot { flex-direction: row; justify-content: center; gap: 1.6vw; margin-top: 1.6vh; padding-top: 1.4vh; }
+.hub-shell .hub-foot .setup-note { padding: 0; }
 .hub-danger-btn {
   display: inline-flex;
   align-items: center;

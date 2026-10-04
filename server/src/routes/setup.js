@@ -8,6 +8,7 @@
 
 import fs from 'node:fs'
 import os from 'node:os'
+import dns from 'node:dns/promises'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { execFile } from 'node:child_process'
@@ -126,6 +127,17 @@ async function scanForApex() {
       const results = await Promise.all(hosts.slice(i, i + BATCH).map(async (h) => (await probeApex(h)) ? h : null))
       for (const h of results.filter(Boolean)) found.push({ host: h, label: h })
     }
+  }
+  // One controller answers twice: by name (apex.local) and by its address in
+  // the sweep. Listed as two, it looked like a choice the customer had to make
+  // and the wizard stopped to ask which. Keep the address - it is what every
+  // later request uses without depending on mDNS - and drop the name when it
+  // is the same machine.
+  if (found.length > 1 && found[0].host === 'apex.local') {
+    try {
+      const { address } = await dns.lookup('apex.local', { family: 4 })
+      if (found.some((f) => f.host === address)) found.shift()
+    } catch { /* the name stopped resolving; leave both */ }
   }
   return found
 }

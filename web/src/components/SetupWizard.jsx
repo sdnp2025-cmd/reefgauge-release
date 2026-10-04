@@ -67,6 +67,11 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
   // Settings does not greet a working controller with "Find your Apex".
   const [apexCurrent, setApexCurrent] = useState(null)
   const [apexChanging, setApexChanging] = useState(false)
+  // The address and login fields are the exception, not the form: shown only
+  // when the scan found nothing, the standard login was refused, or the
+  // customer asks to type an address themselves.
+  const [apexManual, setApexManual] = useState(false)
+  const [apexAskLogin, setApexAskLogin] = useState(false)
 
   // Red Sea equipment step state
   const [gear, setGear] = useState(null)      // discovered/known Red Sea devices
@@ -158,24 +163,47 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
     setLocResults((await api(`/api/setup/location?q=${encodeURIComponent(locQuery)}`)).results)
   })
 
-  const scanApex = () => run(async () => {
-    setApexFound(null)
-    const { found } = await api('/api/setup/apex/scan', { method: 'POST' })
-    setApexFound(found)
-    if (found.length === 1) setApexHost(found[0].host)
-  })
-
-  const verifyApex = () => run(async () => {
+  const verifyHost = async (host) => {
     const res = await fetch('/api/setup/apex/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ host: apexHost, username: apexUser, password: apexPass })
+      body: JSON.stringify({ host, username: apexUser, password: apexPass })
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error ?? 'Verification failed')
     setApexVerified(data)
-    setAnswers((a) => ({ ...a, apex: { host: apexHost, username: apexUser, password: apexPass, inputs: data.mapping } }))
+    setAnswers((a) => ({ ...a, apex: { host, username: apexUser, password: apexPass, inputs: data.mapping } }))
     setKbTarget(null)
+  }
+
+  // Found exactly one: connect to it straight away. The terminal already has
+  // its address, and nearly every Apex still has the login it shipped with, so
+  // the customer's next screen is the live readings and one button. Nothing
+  // the scan already knows is asked for again.
+  const scanApex = () => run(async () => {
+    setApexFound(null)
+    setApexManual(false)
+    setApexAskLogin(false)
+    const { found } = await api('/api/setup/apex/scan', { method: 'POST' })
+    setApexFound(found)
+    if (found.length === 0) return
+    setApexHost(found[0].host)
+    if (found.length > 1) return
+    try {
+      await verifyHost(found[0].host)
+    } catch (err) {
+      setApexAskLogin(true)
+      throw new Error(`Found your Apex at ${found[0].host}. ${err.message} If you changed its login, enter it below.`)
+    }
+  })
+
+  const verifyApex = () => run(async () => {
+    try {
+      await verifyHost(apexHost)
+    } catch (err) {
+      setApexAskLogin(true)
+      throw err
+    }
   })
 
   // Apex step. A controller is usually already set — this step is reached far
@@ -510,7 +538,7 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
               </>
             ) : apexVerified ? (
               <>
-                <p className="setup-ok">✓ Connected — live readings:</p>
+                <p className="setup-ok">✓ Found your Apex at {answers.apex?.host ?? apexHost} — live readings:</p>
                 <div className="setup-params">
                   {Object.entries(apexVerified.values).map(([k, v]) => (
                     <div key={k} className="setup-param"><b>{v}</b><span>{k}</span></div>
@@ -533,16 +561,23 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
                 ))}
                 {apexFound != null && (
                   <>
-                    <div className="setup-inline">
-                      <input {...fieldProps('apexHost', apexHost)} placeholder="Apex address (IP)" />
-                    </div>
-                    <div className="setup-inline">
-                      <input {...fieldProps('apexUser', apexUser)} placeholder="Username" />
-                      <input {...fieldProps('apexPass', apexPass)} placeholder="Password" />
-                    </div>
+                    {(apexFound.length === 0 || apexManual) && (
+                      <div className="setup-inline">
+                        <input {...fieldProps('apexHost', apexHost)} placeholder="Apex address (IP)" />
+                      </div>
+                    )}
+                    {(apexFound.length === 0 || apexManual || apexAskLogin) && (
+                      <div className="setup-inline">
+                        <input {...fieldProps('apexUser', apexUser)} placeholder="Username" />
+                        <input {...fieldProps('apexPass', apexPass)} placeholder="Password" />
+                      </div>
+                    )}
                     <button className="setup-primary" onClick={verifyApex} disabled={busy || !apexHost}>
                       {busy ? 'Checking…' : 'Connect to Apex'}
                     </button>
+                    {apexFound.length > 0 && !apexManual && (
+                      <button className="setup-skip" onClick={() => setApexManual(true)}>Enter a different address ›</button>
+                    )}
                   </>
                 )}
                 <button className="setup-skip" onClick={() => (apexCurrent?.host ? setApexChanging(false) : single ? onExit() : next())}>

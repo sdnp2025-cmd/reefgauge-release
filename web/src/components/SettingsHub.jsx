@@ -366,7 +366,7 @@ export default function SettingsHub({ onExit }) {
 
   return (
     <div className="setup">
-      <div className="setup-card">
+      <div className="setup-card hub-shell">
         <div className="hub-head">
           <h1>Settings</h1>
           <button className="setup-primary compact" onClick={onExit}>Done</button>
