@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { api, waitForServer } from '../api.js'
+import { api, waitForServer, waitForSetupReset } from '../api.js'
 import { useDragScroll } from '../dragScroll.js'
 import SetupWizard, { REGISTER_SECTION } from './SetupWizard.jsx'
 import PhotoManager from './PhotoManager.jsx'
@@ -205,7 +205,6 @@ function Card({ section, summary, onOpen }) {
 // cheapest way to make the hand agree with the head.
 function ResetPanel({ onBack }) {
   const [typed, setTyped] = useState('')
-  const [forgetWifi, setForgetWifi] = useState(false)
   const [kb, setKb] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
@@ -214,14 +213,19 @@ function ResetPanel({ onBack }) {
   const erase = async () => {
     setBusy(true)
     setError(null)
+    setKb(false)
     try {
       await api('/api/setup/reset', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ confirm: 'ERASE', forgetWifi })
+        body: JSON.stringify({ confirm: 'ERASE', forgetWifi: true })
       })
       setDone(true)
-      await waitForServer({ timeoutMs: 60000 })
+      // Nothing of the old setup stays in the browser either.
+      try { localStorage.clear(); sessionStorage.clear() } catch { /* storage unavailable */ }
+      // Wait for the restarted server to say "not set up" before reloading. A
+      // reload against the outgoing one drew the dashboard of an erased unit.
+      await waitForSetupReset()
       window.location.replace('/')
     } catch (err) {
       setError(String(err.message ?? err))
@@ -241,20 +245,14 @@ function ResetPanel({ onBack }) {
   return (
     <div className="setup-body">
       <div className="setup-hero hub-danger">{Ico.warning}</div>
-      <h1>Reset this terminal</h1>
+      <h1>Factory reset</h1>
       <p>
-        This erases everything the household put in: your tank readings and their history,
-        photos, the log and every setting. The terminal restarts as
-        if it came out of the box, and setup runs again from the beginning.
+        This erases everything: your registration, the Wi-Fi network, the tank controller and
+        equipment, tank readings and their history, photos, the log and every setting. The
+        terminal restarts as if it came out of the box, and setup runs again from the very
+        beginning.
       </p>
       <p className="setup-note">This cannot be undone, and nothing is backed up anywhere else.</p>
-
-      <button className={`hub-toggle ${forgetWifi ? 'on' : ''}`} onClick={() => setForgetWifi((v) => !v)}>
-        <b>Also forget Wi-Fi</b>
-        <em>{forgetWifi
-          ? 'The terminal will need a network chosen again on screen. Use this if you are selling or giving it away.'
-          : 'Keeps this network so setup can reach the internet straight away.'}</em>
-      </button>
 
       <input
         {...{ value: typed, readOnly: true, onClick: () => setKb(true), onFocus: () => setKb(true) }}
@@ -382,7 +380,7 @@ export default function SettingsHub({ onExit }) {
 
         <div className="hub-foot">
           <button className="hub-danger-btn" onClick={() => setOpen('reset')}>
-            {Ico.warning} Reset this terminal
+            {Ico.warning} Factory reset
           </button>
           <span className="setup-note">Erases everything and starts setup again.</span>
         </div>

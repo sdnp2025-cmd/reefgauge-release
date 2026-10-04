@@ -592,7 +592,10 @@ async function connectWifi(ssid, password) {
     if (!isLocalRequest(req)) {
       return reply.code(403).send({ error: 'A reset can only be started on the terminal itself.' })
     }
-    const { confirm, forgetWifi } = req.body ?? {}
+    // A factory reset keeps nothing, the network included. `forgetWifi: false`
+    // is still honoured for a caller that asks for it explicitly; the screen
+    // no longer offers it.
+    const { confirm, forgetWifi = true } = req.body ?? {}
     if (confirm !== 'ERASE') return reply.code(400).send({ error: 'confirmation required' })
     if (DEMO) return { ok: true, demo: true }
 
@@ -612,6 +615,16 @@ async function connectWifi(ssid, password) {
         }
       } catch { /* NetworkManager unavailable: the rest of the reset still stands */ }
     }
+
+    // Tell the truth for the 800ms this process has left. /api/setup/status
+    // reads this object, not the file, so the outgoing server went on answering
+    // "set up" about a unit it had just erased - and a page that reloaded in
+    // that window drew the dashboard and stayed there. That is what "reset just
+    // restarts into the home screen" was: the erase had happened, and nothing
+    // on the glass showed it.
+    config.setupComplete = false
+    delete config.registration
+    delete config.tankName
 
     // systemd restarts us; with no config.json the wizard runs from step one.
     setTimeout(() => process.exit(0), 800)

@@ -69,6 +69,23 @@ export async function waitForSetupComplete({ timeoutMs = 60000, pollMs = 400 } =
   return false
 }
 
+// The mirror image, for a factory reset: wait for a server that says the unit
+// is NOT set up. The first second is skipped outright - the process that took
+// the reset is still answering for 800ms, and the one worth asking is the one
+// systemd starts after it.
+export async function waitForSetupReset({ timeoutMs = 60000, pollMs = 400 } = {}) {
+  await new Promise((r) => setTimeout(r, 1500))
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch('/api/setup/status', { cache: 'no-store' })
+      if (res.ok && (await res.json())?.complete === false) return true
+    } catch { /* restarting - expected */ }
+    await new Promise((r) => setTimeout(r, pollMs))
+  }
+  return false
+}
+
 export async function api(path, options = {}) {
   const res = await fetch(path, { ...options, headers: { ...authHeaders(), ...(options.headers ?? {}) } })
   if (!res.ok) {
