@@ -446,7 +446,7 @@ async function connectWifi(ssid, password) {
       const { mapping, values } = autoMapInputs(inputs)
       return { ok: true, inputs, mapping, values }
     } catch (err) {
-      return reply.code(400).send({ error: `Could not read the Apex: ${err.message}` })
+      return reply.code(400).send({ error: `Could not read the controller: ${err.message}` })
     }
   })
 

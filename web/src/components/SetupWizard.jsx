@@ -14,7 +14,7 @@ const Ico = {
   gear: <svg {...S} className="ico"><circle cx="12" cy="12" r="4" /><path d="M12 2v3" /><path d="M12 19v3" /><path d="M2 12h3" /><path d="M19 12h3" /><path d="M4.9 4.9 7 7" /><path d="M17 17l2.1 2.1" /><path d="M19.1 4.9 17 7" /><path d="M7 17l-2.1 2.1" /></svg>
 }
 
-const STEPS = ['Welcome', 'Wi-Fi', 'Location', 'Register', 'Apex', 'Equipment', 'Finish']
+const STEPS = ['Welcome', 'Wi-Fi', 'Location', 'Register', 'Controller', 'Equipment', 'Finish']
 
 // Registration has no dot of its own when opened from Settings: step 3 there
 // is still "Tank name" alone, and this number is past the end of STEPS.
@@ -193,7 +193,7 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
       await verifyHost(found[0].host)
     } catch (err) {
       setApexAskLogin(true)
-      throw new Error(`Found your Apex at ${found[0].host}. ${err.message} If you changed its login, enter it below.`)
+      throw new Error(`Found your controller at ${found[0].host}. ${err.message} If you changed its login, enter it below.`)
     }
   })
 
@@ -393,7 +393,7 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
           <div className="setup-body">
             <img className="setup-logo" src="/brand/reefgauge-logo-600.png" alt="" draggable="false" />
             <h1>Welcome to ReefGauge</h1>
-            <p>Let's get your display set up. This takes about five minutes: connect to Wi-Fi, find your Apex, and find your Red Sea gear.</p>
+            <p>Let's get your display set up. This takes about five minutes: connect to Wi-Fi, find your tank controller, and find your equipment.</p>
             <button className="setup-primary" onClick={next}>Get Started</button>
             {reconfigure && <button className="setup-skip" onClick={onExit}>Exit setup</button>}
             {reconfigure && <UpdatePanel />}
@@ -517,7 +517,7 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
 
         {step === 4 && (
           <div className="setup-body">
-            <h1>{apexCurrent?.host && !apexChanging && !apexVerified ? 'Your Apex' : 'Find your Apex'}</h1>
+            <h1>{apexCurrent?.host && !apexChanging && !apexVerified ? 'Your controller' : 'Find your controller'}</h1>
             {apexCurrent == null && !apexVerified && <div className="setup-note">Checking your controller…</div>}
             {apexCurrent?.host && !apexChanging && !apexVerified ? (
               <>
@@ -538,7 +538,7 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
               </>
             ) : apexVerified ? (
               <>
-                <p className="setup-ok">✓ Found your Apex at {answers.apex?.host ?? apexHost} — live readings:</p>
+                <p className="setup-ok">✓ Found your controller at {answers.apex?.host ?? apexHost} — live readings:</p>
                 <div className="setup-params">
                   {Object.entries(apexVerified.values).map(([k, v]) => (
                     <div key={k} className="setup-param"><b>{v}</b><span>{k}</span></div>
@@ -549,10 +549,10 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
               </>
             ) : (
               <>
-                <p>The terminal will scan your network for a Neptune Apex controller.</p>
+                <p>The terminal will scan your network for your tank controller.</p>
                 {apexFound == null
-                  ? <button className="setup-primary" onClick={scanApex} disabled={busy}>{busy ? 'Scanning network…' : 'Scan for Apex'}</button>
-                  : apexFound.length === 0 && <div className="setup-note">No Apex found — enter its address below, or make sure it's powered on and on the same network.</div>}
+                  ? <button className="setup-primary" onClick={scanApex} disabled={busy}>{busy ? 'Scanning network…' : 'Controller scan'}</button>
+                  : apexFound.length === 0 && <div className="setup-note">No controller found — enter its address below, or make sure it's powered on and on the same network.</div>}
                 {apexFound?.map((f) => (
                   <button key={f.host} className={`setup-row ${apexHost === f.host ? 'selected' : ''}`} onClick={() => setApexHost(f.host)}>
                     <span>{Ico.flask} {f.label}</span>
@@ -563,7 +563,7 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
                   <>
                     {(apexFound.length === 0 || apexManual) && (
                       <div className="setup-inline">
-                        <input {...fieldProps('apexHost', apexHost)} placeholder="Apex address (IP)" />
+                        <input {...fieldProps('apexHost', apexHost)} placeholder="Controller address (IP)" />
                       </div>
                     )}
                     {(apexFound.length === 0 || apexManual || apexAskLogin) && (
@@ -573,7 +573,7 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
                       </div>
                     )}
                     <button className="setup-primary" onClick={verifyApex} disabled={busy || !apexHost}>
-                      {busy ? 'Checking…' : 'Connect to Apex'}
+                      {busy ? 'Checking…' : 'Connect to controller'}
                     </button>
                     {apexFound.length > 0 && !apexManual && (
                       <button className="setup-skip" onClick={() => setApexManual(true)}>Enter a different address ›</button>
@@ -659,7 +659,7 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
                   <div>{Ico.lock} Registered to: <b>{answers.registration ? `${answers.registration.firstName} ${answers.registration.lastName}` : 'not registered'}</b></div>
                   <div>{Ico.pin} Location: <b>{answers.location?.label ?? 'skipped'}</b></div>
                   <div>{Ico.flask} Tank: <b>{answers.tankName ?? 'unnamed'}</b></div>
-                  <div>{Ico.flask} Apex: <b>{answers.apex?.host ?? 'skipped'}</b></div>
+                  <div>{Ico.flask} Controller: <b>{answers.apex?.host ?? 'skipped'}</b></div>
                   <div>{Ico.gear} Equipment: <b>{answers.redSea ? `${Object.keys(answers.redSea.names).length} unit${Object.keys(answers.redSea.names).length === 1 ? '' : 's'}, auto-detecting new ones` : 'auto-detect'}</b></div>
                 </div>
                 <p className="setup-note">

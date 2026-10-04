@@ -85,7 +85,7 @@ const SECTIONS = [
   { id: 'location', step: 2, icon: 'pin', title: 'Location', line: (s) => s.location ?? 'Not set — weather is guessing', bad: (s) => !s.location },
   { id: 'name', step: 3, icon: 'tag', title: 'Tank name', line: (s) => s.tankName ?? 'Not named yet — tap to name it', bad: (s) => !s.tankName },
   { id: 'registration', step: REGISTER_SECTION, icon: 'tag', title: 'Registration', line: (s) => (s.registered ? 'Registered — tap to update your details' : 'Not registered — tap to register'), bad: (s) => !s.registered },
-  { id: 'apex', step: 4, icon: 'flask', title: 'Apex controller', line: (s) => s.apex ?? 'No controller set', bad: (s) => !s.apex },
+  { id: 'apex', step: 4, icon: 'flask', title: 'Tank controller', line: (s) => s.apex ?? 'No controller set', bad: (s) => !s.apex },
   {
     id: 'probes',
     icon: 'probe',
@@ -94,7 +94,7 @@ const SECTIONS = [
     // half their gauges have nothing behind them, which is otherwise only
     // discoverable by noticing a blank card.
     line: (s) => {
-      if (!s.apex) return 'Needs an Apex controller'
+      if (!s.apex) return 'Needs a tank controller'
       const m = s.probes ?? {}
       if (!m.total) return 'Tap to check which probe is which'
       return `${m.mapped} of ${m.total} assigned`
