@@ -86,6 +86,27 @@ export async function waitForSetupReset({ timeoutMs = 60000, pollMs = 400 } = {}
   return false
 }
 
+// Wait for a server that reports a different version from the one that started
+// an update. Minutes, not seconds: the terminal installs and rebuilds itself.
+//
+// Returns false when the update did not take: the server came back as the same
+// version (it rolled back), or nothing changed in the time allowed.
+export async function waitForNewVersion(oldVersion, oldStartedAt, { timeoutMs = 12 * 60000, pollMs = 2000 } = {}) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch('/api/setup/status', { cache: 'no-store' })
+      if (res.ok) {
+        const s = await res.json()
+        if (s?.version && s.version !== oldVersion) return true
+        if (oldStartedAt && s?.startedAt && s.startedAt !== oldStartedAt) return false
+      }
+    } catch { /* restarting - expected */ }
+    await new Promise((r) => setTimeout(r, pollMs))
+  }
+  return false
+}
+
 export async function api(path, options = {}) {
   const res = await fetch(path, { ...options, headers: { ...authHeaders(), ...(options.headers ?? {}) } })
   if (!res.ok) {

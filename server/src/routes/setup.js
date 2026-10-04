@@ -198,10 +198,25 @@ export default async function setupRoutes(app, { config, state }) {
   // so a unit whose config.json was copied straight from the example — which
   // is exactly what install.sh does — reported itself already set up. The
   // wizard was skipped and the unit ran on example values forever.
+  // Setup was interrupted by its own software update (routes/system.js) and
+  // should pick up after the Wi-Fi step rather than at the welcome screen. Good
+  // for half an hour: a marker left by an update that never finished must not
+  // skip the Wi-Fi step for whoever sets the unit up next week.
+  const startedAt = Date.now()
+  const resumeMarker = path.join(path.dirname(config.db), '.setup-resume')
+  const resuming = () => {
+    try { return Date.now() - fs.statSync(resumeMarker).mtimeMs < 30 * 60_000 } catch { return false }
+  }
+
   app.get('/api/setup/status', async () => ({
     complete: DEMO ? true : config.setupComplete === true,
     demo: DEMO,
-    version
+    version,
+    // When this process started. An update that fails rolls back and restarts
+    // the same version; a changed start time with an unchanged version is how
+    // the wizard tells that apart from an update still running.
+    startedAt,
+    resume: !DEMO && config.setupComplete !== true && resuming()
   }))
 
   app.get('/api/setup/wifi/status', async () => ({
@@ -715,6 +730,7 @@ async function connectWifi(ssid, password) {
     // wizard again. The keys in `next` all come from the config file, so the
     // derived ones this object also carries are untouched.
     Object.assign(config, next)
+    try { fs.rmSync(resumeMarker, { force: true }) } catch { /* nothing to clear */ }
 
     // systemd (Restart=always) brings the server back up with the new config
     setTimeout(() => process.exit(0), 800)

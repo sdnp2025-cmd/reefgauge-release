@@ -321,6 +321,13 @@ export default async function systemRoutes(app, { config, state, db, support }) 
     if (DEMO) return { ok: true, demo: true }
     const script = path.join(repoRoot, 'scripts', 'update.sh')
     if (!fs.existsSync(script)) return reply.code(500).send({ error: 'update script missing' })
+    // First-run setup updates the terminal straight after Wi-Fi and then has
+    // to carry on where it was, in a new server process and a restarted
+    // browser. Neither remembers anything, so the place is kept on disk
+    // (read back by /api/setup/status, cleared when setup completes).
+    if (req.body?.resumeSetup) {
+      try { fs.writeFileSync(path.join(path.dirname(config.db), '.setup-resume'), String(Date.now())) } catch { /* setup simply starts over */ }
+    }
     // Detached: the update restarts this very server at the end
     const child = spawn('bash', [script], {
       cwd: repoRoot,

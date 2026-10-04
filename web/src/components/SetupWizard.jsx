@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { api, waitForSetupComplete } from '../api.js'
+import { api, waitForSetupComplete, waitForNewVersion } from '../api.js'
 import OnScreenKeyboard from './OnScreenKeyboard.jsx'
 import UpdatePanel from './UpdatePanel.jsx'
 
@@ -52,6 +52,12 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
   const [pickedSsid, setPickedSsid] = useState(null)
   const [wifiPassword, setWifiPassword] = useState('')
   const [wifiOk, setWifiOk] = useState(null)
+  // First-run only: once the network is up the terminal brings itself up to
+  // date before asking anything else. A card can sit in a box for months; the
+  // customer should set up the software that exists now, not the software the
+  // card was flashed with.
+  const firstRun = !single && !reconfigure
+  const [updating, setUpdating] = useState(null)   // null | 'checking' | 'installing'
 
   // Location step state
   const [locQuery, setLocQuery] = useState('')
@@ -137,6 +143,40 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
       setBusy(false)
     }
   }
+
+  const leaveWifi = async () => {
+    if (!firstRun) { next(); return }
+    setError(null)
+    setKbTarget(null)
+    setUpdating('checking')
+    try {
+      const check = await api('/api/system/update/check')
+      if (check.behind > 0) {
+        const before = await api('/api/setup/status')
+        setUpdating('installing')
+        await api('/api/system/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ resumeSetup: true })
+        })
+        // The new server restarts the display itself; this reload is for the
+        // case where it does not. Either way setup resumes after Wi-Fi.
+        if (await waitForNewVersion(before.version, before.startedAt)) { window.location.replace('/'); return }
+      }
+    } catch { /* no internet, or the check failed: set up what is here */ }
+    setUpdating(null)
+    next()
+  }
+
+  // Back from that update: skip the welcome and Wi-Fi screens already done.
+  useEffect(() => {
+    if (!firstRun) return
+    api('/api/setup/status').then(async (s) => {
+      if (!s?.resume) return
+      try { const w = await api('/api/setup/wifi/status'); if (w?.ssid) setWifiOk(w.ssid) } catch { /* shown as skipped */ }
+      setStep((cur) => (cur < 2 ? 2 : cur))
+    }).catch(() => {})
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const scanWifi = () => run(async () => {
     // networks stays null while scanning, and null renders as "Scanning...".
@@ -400,13 +440,34 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
           </div>
         )}
 
-        {step === 1 && (
+        {updating && (
+          <div className="setup-body">
+            <img className="setup-logo" src="/brand/reefgauge-logo-600.png" alt="" draggable="false" />
+            {updating === 'checking' ? (
+              <>
+                <h1>Checking for the latest software…</h1>
+                <p>One moment.</p>
+              </>
+            ) : (
+              <>
+                <h1>Getting the latest software</h1>
+                <p>
+                  Your ReefGauge is updating itself. This takes about five minutes, and the
+                  screen will restart once. Setup carries on by itself afterwards.
+                </p>
+                <p className="setup-note">Please leave the terminal plugged in.</p>
+              </>
+            )}
+          </div>
+        )}
+
+        {step === 1 && !updating && (
           <div className="setup-body">
             <h1>Connect to Wi-Fi</h1>
             {wifiOk ? (
               <>
                 <p className="setup-ok">✓ Connected to {wifiOk}</p>
-                <button className="setup-primary" onClick={next}>{single ? 'Save' : 'Continue'}</button>
+                <button className="setup-primary" onClick={leaveWifi}>{single ? 'Save' : 'Continue'}</button>
               </>
             ) : pickedSsid ? (
               <>
@@ -433,7 +494,7 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
                   ))}
                 </div>
                 <button className="setup-skip" onClick={scanWifi} disabled={busy}>↻ Rescan</button>
-                <button className="setup-skip" onClick={single ? onExit : next}>{single ? 'Done' : 'Skip (using ethernet) ›'}</button>
+                <button className="setup-skip" onClick={single ? onExit : leaveWifi}>{single ? 'Done' : 'Skip (using ethernet) ›'}</button>
               </>
             )}
           </div>
@@ -677,7 +738,7 @@ export default function SetupWizard({ reconfigure, onExit, section }) {
         {single && !finishing && (
           <button className="setup-back" onClick={onExit}>‹ Settings</button>
         )}
-        {!single && step > 0 && step < STEPS.length - 1 && !finishing && (
+        {!single && step > 0 && step < STEPS.length - 1 && !finishing && !updating && (
           <button className="setup-back" onClick={back}>‹ Back</button>
         )}
       </div>
