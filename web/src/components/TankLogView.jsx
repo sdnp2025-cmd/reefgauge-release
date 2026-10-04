@@ -410,6 +410,7 @@ export default function TankLogView({ onBack, onOpen }) {
         <span className="view-title">Chemistry</span>
         <span className="view-action">
           {last && <span className="view-meta">Last water change {agoLabel(last.ts)}</span>}
+          <button className="view-btn" onClick={() => onOpen?.('stores')}>Fish stores ›</button>
           <button className="view-btn" onClick={() => onOpen?.('corals')}>Corals ›</button>
         </span>
       </div>

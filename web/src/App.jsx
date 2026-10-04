@@ -5,6 +5,7 @@ import HomeCards from './components/HomeCards.jsx'
 import TankLogView from './components/TankLogView.jsx'
 import IcpView from './components/IcpView.jsx'
 import CoralsView from './components/CoralsView.jsx'
+import StoresView from './components/StoresView.jsx'
 import AirTicker from './components/AirTicker.jsx'
 import EquipmentOverlay from './components/EquipmentOverlay.jsx'
 import { TankView, WeatherView, AirView } from './components/Views.jsx'
@@ -78,7 +79,7 @@ export default function App() {
   // ?view=log opens a detail screen directly. Worth having beyond the
   // convenience of checking one: it gives an alert somewhere on the dashboard
   // a way to send you to the screen it is complaining about.
-  const VIEWS = ['tank', 'weather', 'air', 'log', 'icp', 'corals']
+  const VIEWS = ['tank', 'weather', 'air', 'log', 'icp', 'corals', 'stores']
   const [view, setView] = useState(() => {
     const asked = new URLSearchParams(location.search).get('view')
     return VIEWS.includes(asked) ? asked : 'home'
@@ -169,11 +170,12 @@ export default function App() {
         <AlertCard />
         {view === 'home' && <HomeCards onOpen={setView} />}
         {view === 'tank' && <TankView onBack={home} onEquipment={() => setEquipOpen(true)} />}
-        {view === 'weather' && <WeatherView onBack={home} />}
+        {view === 'weather' && <WeatherView onBack={home} onOpen={setView} />}
         {view === 'air' && <AirView onBack={home} />}
         {view === 'log' && <TankLogView onBack={home} onOpen={setView} />}
         {view === 'icp' && <IcpView onBack={home} />}
         {view === 'corals' && <CoralsView onBack={home} />}
+        {view === 'stores' && <StoresView onBack={home} />}
       </main>
       <AirTicker onOpen={(t) => (t === 'equipment' ? setEquipOpen(true) : setView(t))} />
       {equipOpen && <EquipmentOverlay onClose={() => setEquipOpen(false)} />}
