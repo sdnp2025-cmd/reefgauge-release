@@ -207,7 +207,7 @@ export default function HomeCards({ onOpen }) {
           ) : (
             <div className="hc-muted">
               {tank?.apexConfigured === false
-                ? 'No controller connected \u2014 add one in Settings'
+                ? 'No controller connected \u2014 add one in Settings, or log a test under Chemistry'
                 : 'Waiting for controller\u2026'}
             </div>
           )}

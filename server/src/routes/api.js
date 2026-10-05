@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import QRCode from 'qrcode'
 import { PARAM_META, saveConfigAtomic } from '../config.js'
+import { latestManual } from './tests.js'
 import { PHOTO_EXTENSIONS, CONVERTED_EXTENSIONS, processPhoto } from '../photoIntake.js'
 import { isLocalRequest } from '../phoneSession.js'
 import { getRingSnapshot } from '../pollers/ring.js'
@@ -124,6 +125,22 @@ export default async function apiRoutes(app, { config, state, db }) {
         // bought the other box, and when they ring up about a reading it
         // matters which device is being talked about.
         source: config.apex?.inputSources?.[key] ?? null,
+        ...PARAM_META[key]
+      }
+    }
+    // Tests done by hand fill whatever no probe is filling: a parameter with
+    // nothing mapped to it, or one whose probe has yet to report. A live probe
+    // always wins - it is newer by definition.
+    const manual = latestManual(db)
+    for (const [key, test] of Object.entries(manual)) {
+      if (!PARAM_META[key] || params[key]?.value != null) continue
+      const range = config.ranges?.[key]
+      params[key] = {
+        value: test.value,
+        status: range ? (test.value < range[0] ? 'low' : test.value > range[1] ? 'high' : 'ok') : 'unknown',
+        range: range ?? null,
+        source: 'manual',
+        testedAt: test.ts,
         ...PARAM_META[key]
       }
     }

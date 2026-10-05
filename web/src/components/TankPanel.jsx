@@ -25,6 +25,13 @@ const FLAGS = { low: '▼ LOW', high: '▲ HIGH' }
 // first thing anyone needs to know.
 export const SOURCE_LABEL = { aquawiz: 'AquaWiz', ekoral: 'Ekoral' }
 
+// How long ago a hand test was done, short enough to sit under a gauge.
+export function testedAgo(ts) {
+  if (!ts) return ''
+  const days = Math.floor((Date.now() - ts) / 86400000)
+  return days <= 0 ? 'today' : days === 1 ? 'yesterday' : `${days}d ago`
+}
+
 // Speedometer: 180° arc, continuous red→amber→green→amber→red gradient so the
 // green apex is the target band and both extremes run hot. The displayed span
 // is the target range padded by one range-width per side (thirds).
@@ -92,6 +99,7 @@ function Gauge({ paramKey, p, onOpen }) {
       <div className="gauge-label">
         <span>{p?.label ?? paramKey}</span>
         {SOURCE_LABEL[p?.source] && <span className="gauge-src">{SOURCE_LABEL[p.source]}</span>}
+        {p?.source === 'manual' && <span className="gauge-src">Tested {testedAgo(p.testedAt)}</span>}
         {FLAGS[status] && <span className="gauge-flag">{FLAGS[status]}</span>}
       </div>
       <svg viewBox="0 0 100 78">

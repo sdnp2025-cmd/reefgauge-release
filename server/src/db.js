@@ -16,6 +16,16 @@ export function initDb(file) {
     );
     CREATE INDEX IF NOT EXISTS idx_tank_param_ts ON tank_readings(param, ts);
 
+    -- Tests done by hand (routes/tests.js). The record; tank_readings holds a
+    -- copy for the charts and is pruned by age, so it cannot be.
+    CREATE TABLE IF NOT EXISTS manual_tests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ts INTEGER NOT NULL,
+      param TEXT NOT NULL,
+      value REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_manual_param_ts ON manual_tests(param, ts);
+
     CREATE TABLE IF NOT EXISTS env_readings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       ts INTEGER NOT NULL,

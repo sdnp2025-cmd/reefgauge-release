@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react'
 import { api, usePolling } from '../api.js'
 import HistoryChart from './HistoryChart.jsx'
 import Keypad from './Keypad.jsx'
+import TestLog from './TestLog.jsx'
 import { agoLabel } from './LogCards.jsx'
 
 // Dosing and water changes.
@@ -403,13 +404,16 @@ function WaterColumn() {
 export default function TankLogView({ onBack, onOpen }) {
   const [log] = usePolling('/api/log/summary', 60000)
   const last = log?.lastWaterChange
+  const [testing, setTesting] = useState(false)
   return (
     <div className="view">
+      {testing && <TestLog onClose={() => setTesting(false)} />}
       <div className="view-bar">
         <button className="view-back" onClick={onBack}>‹ Home</button>
         <span className="view-title">Chemistry</span>
         <span className="view-action">
           {last && <span className="view-meta">Last water change {agoLabel(last.ts)}</span>}
+          <button className="view-btn primary" onClick={() => setTesting(true)}>Log a test</button>
           <button className="view-btn" onClick={() => onOpen?.('stores')}>Fish stores ›</button>
           <button className="view-btn" onClick={() => onOpen?.('corals')}>Corals ›</button>
         </span>

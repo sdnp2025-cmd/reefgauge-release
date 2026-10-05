@@ -10,7 +10,8 @@ import { createPortal } from 'react-dom'
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '⌫']
 
-export default function Keypad({ title, subtitle, unit, initial, onCommit, onClose }) {
+// `allowZero`: a nitrate or phosphate test can honestly read 0.
+export default function Keypad({ title, subtitle, unit, initial, onCommit, onClose, allowZero = false }) {
   // Starts with the usual amount already typed, so the common case is one tap
   // on Enter. The first digit pressed replaces it rather than appending to it.
   const [text, setText] = useState(initial != null ? String(initial) : '')
@@ -32,7 +33,7 @@ export default function Keypad({ title, subtitle, unit, initial, onCommit, onClo
   }
 
   const value = Number(text)
-  const valid = text !== '' && text !== '.' && Number.isFinite(value) && value > 0
+  const valid = text !== '' && text !== '.' && Number.isFinite(value) && (allowZero ? value >= 0 : value > 0)
 
   return createPortal(
     // Its own z-index rather than relying on mount order: the keypad opens

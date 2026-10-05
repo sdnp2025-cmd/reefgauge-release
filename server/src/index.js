@@ -18,6 +18,7 @@ import setupRoutes from './routes/setup.js'
 import reefLogRoutes from './routes/reeflog.js'
 import coralRoutes from './routes/corals.js'
 import storesRoutes from './routes/stores.js'
+import testsRoutes from './routes/tests.js'
 import careRoutes from './routes/care.js'
 import systemRoutes from './routes/system.js'
 import { createSupportSession } from './supportSession.js'
@@ -143,6 +144,7 @@ app.addHook('onRequest', async (req, reply) => {
 await app.register(fastifyMultipart, { limits: { fileSize: 25 * 1024 * 1024, files: 20 } })
 await app.register(apiRoutes, { config, state, db })
 await app.register(storesRoutes, { config })
+await app.register(testsRoutes, { db })
 await app.register(setupRoutes, { config, state })
 await app.register(reefLogRoutes, { config, db })
 await app.register(coralRoutes, { config, db })
