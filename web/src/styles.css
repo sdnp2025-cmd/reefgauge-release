@@ -3425,3 +3425,42 @@ body {
 .tests-tile.due .tests-when { color: var(--warn); font-weight: 700; }
 .tests-recent { overflow-y: auto; min-height: 0; scrollbar-width: none; border-top: 1px solid var(--panel-edge); padding-top: 1vh; }
 .tests-recent::-webkit-scrollbar { display: none; }
+
+
+/* ---- Update notice ----
+   Offered on the home screen when a newer release exists. Above the timer
+   bar (18), below every overlay (20+) and the idle slideshow (30): it waits
+   under the slideshow and is there when someone touches the screen. */
+.update-notice {
+  position: fixed;
+  left: 50%;
+  bottom: 9vh;
+  transform: translateX(-50%);
+  width: 62vw;
+  z-index: 19;
+  display: flex;
+  flex-direction: column;
+  gap: 1vh;
+  padding: 2vh 2.4vw;
+  background: var(--panel-solid);
+  border: 2px solid var(--accent);
+  border-radius: 18px;
+  box-shadow: 0 1.5vh 5vh rgba(10, 20, 60, 0.35);
+}
+.update-notice-title { font-size: 3vh; font-weight: 800; color: var(--accent); }
+.update-notice-text { font-size: 2.2vh; line-height: 1.45; color: var(--ink-2); margin: 0; }
+.update-notice-error { font-size: 2vh; color: var(--bad, #c0392b); font-weight: 700; margin: 0; }
+.update-notice-actions { display: flex; justify-content: flex-end; gap: 1.6vw; margin-top: 0.6vh; }
+.update-notice-later,
+.update-notice-dismiss,
+.update-notice-now {
+  min-height: 7vh;
+  padding: 0 2.4vw;
+  border-radius: 14px;
+  font-size: 2.4vh;
+  font-weight: 800;
+  cursor: pointer;
+}
+.update-notice-later,
+.update-notice-dismiss { background: none; border: 2px solid var(--panel-edge); color: var(--ink-2); }
+.update-notice-now { background: var(--coral); border: none; color: #fff; }

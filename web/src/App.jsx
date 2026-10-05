@@ -21,6 +21,7 @@ import PhoneSetup from './components/PhoneSetup.jsx'
 import { TimerBar, TimerPicker } from './components/TimerBar.jsx'
 import BootSplash, { wantsSplash } from './components/BootSplash.jsx'
 import AlertCard from './components/AlertCard.jsx'
+import UpdateNotice from './components/UpdateNotice.jsx'
 import { useTankName } from './tankName.js'
 import { usePolling } from './api.js'
 
@@ -183,6 +184,8 @@ export default function App() {
       {timerOpen && <TimerPicker onClose={() => setTimerOpen(false)} />}
       <TimerBar />
       <IdleSlideshow />
+      {/* Only on the home screen with nothing open over it, so it never sits on a keypad. */}
+      {view === 'home' && !photosOpen && !timerOpen && !equipOpen && <UpdateNotice />}
       <DoorbellOverlay />
     </div>
   )

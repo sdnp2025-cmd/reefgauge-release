@@ -303,18 +303,100 @@ export default async function systemRoutes(app, { config, state, db, support }) 
     }
   })
 
+  // ---- Update announcements ------------------------------------------------
+  //
+  // Updates used to happen only when someone went looking (Settings -> Update,
+  // or a support session). A release now announces itself: the terminal asks
+  // the release repository every few hours, remembers what it found, and the
+  // dashboard offers "Update now" or "Later". Nothing is ever installed
+  // without a tap - the announcement is the whole feature.
+  //
+  // "Later" is a snooze, not a veto: that release stays quiet for a day and
+  // then asks again, and a newer release asks straight away. Settings ->
+  // Update keeps working the whole time.
+  const dataDir = path.dirname(config.db)
+  const snoozeFile = path.join(dataDir, '.update-snooze.json')
+  const SNOOZE_MS = 24 * 3600 * 1000
+  const CHECK_EVERY_MS = 6 * 3600 * 1000
+  let announced = null // { id, version, latest, behind, checkedAt } while a newer release exists
+  // One check at a time, and none once an update has been started: the check
+  // and update.sh both write to .git, and a fetch landing in the middle of the
+  // update's pull would fail the pull and roll the update back.
+  let inflight = null
+  let updateStarted = false
+
+  const readSnooze = () => {
+    try { return JSON.parse(fs.readFileSync(snoozeFile, 'utf8')) } catch { return null }
+  }
+
+  function checkForUpdate() {
+    if (inflight) return inflight
+    inflight = doCheck().finally(() => { inflight = null })
+    return inflight
+  }
+
+  async function doCheck() {
+    if (updateStarted) return { version: readVersion(), behind: 0, latest: null, updating: true }
+    await exec('git', ['fetch', '--quiet', 'origin', 'main'], { cwd: repoRoot, timeout: 30000 })
+    const git = async (...args) => (await exec('git', args, { cwd: repoRoot })).stdout.trim()
+    const behind = Number(await git('rev-list', '--count', 'HEAD..origin/main'))
+    if (behind > 0) {
+      const latest = await git('log', '-1', '--format=%s', 'origin/main')
+      const id = await git('rev-parse', 'origin/main')
+      // The version the update will install; the subject line is the fallback.
+      let version = null
+      try { version = (await git('show', 'origin/main:VERSION')) || null } catch { /* older layout */ }
+      announced = { id, version, latest, behind, checkedAt: Date.now() }
+      return { version: readVersion(), behind, latest }
+    }
+    announced = null
+    // Up to date, so any snooze on file is for a release that is now installed.
+    try { fs.rmSync(snoozeFile, { force: true }) } catch { /* nothing to tidy */ }
+    return { version: readVersion(), behind, latest: null }
+  }
+
+  if (!DEMO) {
+    // Not in the first minutes (the unit is still bringing up Wi-Fi and the
+    // display) and not before setup has finished - setup updates the unit
+    // itself, in its own words.
+    const tick = () => {
+      if (config.setupComplete !== true || updateStarted) return
+      checkForUpdate().catch((err) => app.log.info(`update announcement check skipped: ${err.message}`))
+    }
+    setTimeout(tick, 2 * 60 * 1000).unref()
+    setInterval(tick, CHECK_EVERY_MS).unref()
+  }
+
   app.get('/api/system/update/check', async (req, reply) => {
     if (DEMO) return { version: readVersion(), behind: 0, latest: null }
     try {
-      await exec('git', ['fetch', '--quiet', 'origin', 'main'], { cwd: repoRoot, timeout: 30000 })
-      const behind = Number((await exec('git', ['rev-list', '--count', 'HEAD..origin/main'], { cwd: repoRoot })).stdout.trim())
-      const latest = behind > 0
-        ? (await exec('git', ['log', '-1', '--format=%s', 'origin/main'], { cwd: repoRoot })).stdout.trim()
-        : null
-      return { version: readVersion(), behind, latest }
+      return await checkForUpdate()
     } catch (err) {
       return reply.code(502).send({ error: `update check failed: ${err.message}` })
     }
+  })
+
+  // What the dashboard polls. Local and cheap: it reads what the last check
+  // found, it does not go to the network.
+  app.get('/api/system/update/notice', async () => {
+    if (DEMO) {
+      // Only for looking at the screen on a bench; never in promo demos.
+      return process.env.DEMO_UPDATE
+        ? { available: true, current: readVersion(), version: '9.9.9', latest: 'Preview of the update notice' }
+        : { available: false }
+    }
+    if (!announced) return { available: false }
+    const snooze = readSnooze()
+    if (snooze && snooze.id === announced.id && snooze.until > Date.now()) return { available: false }
+    return { available: true, current: readVersion(), version: announced.version, latest: announced.latest }
+  })
+
+  app.post('/api/system/update/snooze', async () => {
+    if (DEMO || !announced) return { ok: true }
+    try {
+      fs.writeFileSync(snoozeFile, JSON.stringify({ id: announced.id, until: Date.now() + SNOOZE_MS }))
+    } catch { /* worst case it asks again at the next poll; never an error on the wall */ }
+    return { ok: true }
   })
 
   app.post('/api/system/update', async (req, reply) => {
@@ -328,6 +410,10 @@ export default async function systemRoutes(app, { config, state, db, support }) 
     if (req.body?.resumeSetup) {
       try { fs.writeFileSync(path.join(path.dirname(config.db), '.setup-resume'), String(Date.now())) } catch { /* setup simply starts over */ }
     }
+    // Let a check that is mid-fetch finish before update.sh pulls, and start
+    // no more checks from this process (it is about to be replaced anyway).
+    updateStarted = true
+    if (inflight) { try { await inflight } catch { /* the update will find out for itself */ } }
     // Detached: the update restarts this very server at the end
     const child = spawn('bash', [script], {
       cwd: repoRoot,
