@@ -170,6 +170,16 @@ function AirCard({ onOpen }) {
   )
 }
 
+// However many gauges there are, they fill the card. One to three stack full
+// width; four and up go two across, and an odd one out takes the whole last
+// row rather than leaving a hole beside it. The tiles then size their own
+// ring and type to the space they were given (see .hc-gauge in styles.css).
+function gaugeGrid(n) {
+  const cols = n <= 3 ? 1 : 2
+  const rows = n <= 3 ? Math.max(n, 1) : Math.ceil(n / 2)
+  return { '--cols': cols, '--rows': rows }
+}
+
 export default function HomeCards({ onOpen }) {
   const [tank] = usePolling('/api/tank/latest', 30000)
   const series = useTankSeries()
@@ -201,7 +211,7 @@ export default function HomeCards({ onOpen }) {
             )}
           </div>
           {keys.length ? (
-            <div className="hc-gauges">
+            <div className="hc-gauges" style={gaugeGrid(keys.length)} data-odd={keys.length > 3 && keys.length % 2 === 1 ? '' : undefined}>
               {keys.map((k) => <Ring key={k} pkey={k} p={params[k]} crit={critical.includes(params[k])} series={series[k]} />)}
             </div>
           ) : (

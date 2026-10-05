@@ -964,16 +964,20 @@ body {
 .chip-crit { background: var(--chip-crit-bg); border: 1px solid var(--chip-crit-edge); color: var(--chip-crit-ink); }
 .chip-warn { background: var(--chip-warn-bg); border: 1px solid var(--chip-warn-edge); color: var(--chip-warn-ink); }
 
-/* Ring gauges on the reef card: two columns, four deep, a day-line each */
+/* Ring gauges on the reef card, a day-line each. The grid is set from the
+   number of gauges (gaugeGrid in HomeCards.jsx) so they always fill the card:
+   a tank with three readings gets three large tiles, not three small ones and
+   five empty slots. */
 .hc-gauges {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-rows: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--rows, 4), minmax(0, 1fr));
   gap: 0.7vh 0.6vw;
   position: relative;
 }
+.hc-gauges[data-odd] .hc-gauge:last-child { grid-column: 1 / -1; }
 .hc-gauge {
   display: flex;
   align-items: center;
@@ -984,23 +988,27 @@ body {
   border: 1px solid var(--panel-edge);
   min-height: 0;
   min-width: 0;
+  /* Each tile is its own yardstick: the ring and the type below are sized in
+     fractions of the tile (cqh/cqw), so a tile given more room uses it. */
+  container-type: size;
 }
-.hc-ring { height: 100%; max-height: 10.4vh; aspect-ratio: 1; flex-shrink: 0; }
+.hc-ring { height: min(86cqh, 34cqw); width: auto; aspect-ratio: 1; flex-shrink: 0; }
 .hc-ring-track { stroke: var(--ring-track); }
 .hc-ring-prog.rs-ok { stroke: var(--tank-ok); }
 .hc-ring-prog.rs-warn { stroke: var(--tank-warn); }
 .hc-ring-prog.rs-crit { stroke: var(--tank-bad); }
 .hc-ring-val { fill: var(--ink); font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .hc-ring-unit { fill: var(--ink-2); font-size: 9.5px; font-weight: 600; }
-.hc-gauge-info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 0.25vh; }
-.hc-gauge-name { font-size: 2.6vh; font-weight: 800; color: var(--ink); letter-spacing: -0.01em; }
-.hc-gauge-status { font-size: 2vh; color: var(--ink-2); font-weight: 600; display: flex; align-items: center; gap: 0.3vw; }
+.hc-gauge-info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: clamp(0.25vh, 2cqh, 1.4vh); }
+.hc-gauge-name { font-size: clamp(2.3vh, 17cqh, 5.4vh); font-weight: 800; color: var(--ink); letter-spacing: -0.01em; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hc-gauge-status { font-size: clamp(1.8vh, 12cqh, 3.4vh); color: var(--ink-2); font-weight: 600; display: flex; align-items: center; gap: 0.3vw; white-space: nowrap; }
 .hc-gauge-status.is-warn { color: var(--warn); font-weight: 700; }
 .hc-gauge-status.is-crit { color: var(--bad); font-weight: 700; }
 .hc-gauge-range { font-size: 1.5vh; color: var(--muted); }
 
 /* The last day as a line, the target band behind it. A picture, not an animation. */
 .hc-spark { width: 100%; height: 2.6vh; display: block; overflow: visible; }
+.hc-gauge .hc-spark { height: clamp(2.4vh, 20cqh, 11vh); }
 .hc-spark-band { fill: rgba(13, 148, 136, 0.13); }
 .hc-spark-line { stroke: var(--tank-ok); stroke-width: 1.6px; stroke-linejoin: round; stroke-linecap: round; }
 .hc-spark-dot { stroke: var(--tank-ok); stroke-width: 5px; stroke-linecap: round; fill: none; }
