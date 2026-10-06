@@ -70,8 +70,15 @@ rollback() {
 }
 trap rollback ERR
 
-echo "==> Fetching"
-git pull --ff-only origin main
+# Which branch of the release repository this unit follows: main (customers,
+# the default) or bench (the bench unit). Set from the unit itself; see
+# server/src/routes/system.js. Anything but the word bench means main.
+CHANNEL=main
+if [ "$({ tr -d '[:space:]' < "${REEFGAUGE_DATA:-server/data}/.update-channel"; } 2>/dev/null)" = "bench" ]; then
+  CHANNEL=bench
+fi
+echo "==> Fetching ($CHANNEL channel)"
+git pull --ff-only origin "$CHANNEL"
 
 echo "==> Server dependencies"
 (cd server && npm install --omit=dev)

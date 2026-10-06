@@ -317,6 +317,17 @@ export default async function systemRoutes(app, { config, state, db, support }) 
   const dataDir = path.dirname(config.db)
   const snoozeFile = path.join(dataDir, '.update-snooze.json')
   const SNOOZE_MS = 24 * 3600 * 1000
+  // Which branch of the release repository this unit follows. `main` is what
+  // customers get and the default; `bench` is where releases land first, for
+  // the bench unit. A one-word file beside the database, because update.sh has
+  // to read it too and shell is happiest with a file. It is set only from the
+  // unit itself (see the channel route) and absent means main, so no unit
+  // follows bench unless somebody at the unit chose it.
+  const channelFile = path.join(dataDir, '.update-channel')
+  const readChannel = () => {
+    try { return fs.readFileSync(channelFile, 'utf8').trim() === 'bench' ? 'bench' : 'main' } catch { return 'main' }
+  }
+  const LOCAL_IPS = ['127.0.0.1', '::1', '::ffff:127.0.0.1']
   const CHECK_EVERY_MS = 6 * 3600 * 1000
   let announced = null // { id, version, latest, behind, checkedAt } while a newer release exists
   // One check at a time, and none once an update has been started: the check
@@ -337,16 +348,20 @@ export default async function systemRoutes(app, { config, state, db, support }) 
 
   async function doCheck() {
     if (updateStarted) return { version: readVersion(), behind: 0, latest: null, updating: true }
-    await exec('git', ['fetch', '--quiet', 'origin', 'main'], { cwd: repoRoot, timeout: 30000 })
+    const channel = readChannel()
+    const ref = `origin/${channel}`
+    // An explicit refspec, so the remote-tracking branch is updated whatever
+    // the clone was made with (a single-branch clone only knows main).
+    await exec('git', ['fetch', '--quiet', 'origin', `+refs/heads/${channel}:refs/remotes/${ref}`], { cwd: repoRoot, timeout: 30000 })
     const git = async (...args) => (await exec('git', args, { cwd: repoRoot })).stdout.trim()
-    const behind = Number(await git('rev-list', '--count', 'HEAD..origin/main'))
+    const behind = Number(await git('rev-list', '--count', `HEAD..${ref}`))
     if (behind > 0) {
-      const latest = await git('log', '-1', '--format=%s', 'origin/main')
-      const id = await git('rev-parse', 'origin/main')
+      const latest = await git('log', '-1', '--format=%s', ref)
+      const id = await git('rev-parse', ref)
       // The version the update will install; the subject line is the fallback.
       let version = null
-      try { version = (await git('show', 'origin/main:VERSION')) || null } catch { /* older layout */ }
-      announced = { id, version, latest, behind, checkedAt: Date.now() }
+      try { version = (await git('show', `${ref}:VERSION`)) || null } catch { /* older layout */ }
+      announced = { id, version, latest, behind, channel, checkedAt: Date.now() }
       return { version: readVersion(), behind, latest }
     }
     announced = null
@@ -388,7 +403,46 @@ export default async function systemRoutes(app, { config, state, db, support }) 
     if (!announced) return { available: false }
     const snooze = readSnooze()
     if (snooze && snooze.id === announced.id && snooze.until > Date.now()) return { available: false }
-    return { available: true, current: readVersion(), version: announced.version, latest: announced.latest }
+    return { available: true, current: readVersion(), version: announced.version, latest: announced.latest, channel: announced.channel }
+  })
+
+  app.get('/api/system/update/channel', async () => ({ channel: DEMO ? 'main' : readChannel() }))
+
+  // Switch this unit between customers' releases (main) and early ones (bench).
+  // Local requests only - the screen of the unit, or a support session, which
+  // arrives from the unit itself. Anyone else on the customer's network, token
+  // or not, is refused: this decides what software a unit will install.
+  app.post('/api/system/update/channel', async (req, reply) => {
+    if (DEMO) return { ok: true, demo: true }
+    if (!LOCAL_IPS.includes(req.ip)) {
+      return reply.code(403).send({ error: 'the release channel can only be changed on the terminal itself' })
+    }
+    const want = req.body?.channel
+    if (want !== 'main' && want !== 'bench') {
+      return reply.code(400).send({ error: "channel must be 'main' or 'bench'" })
+    }
+    if (updateStarted) return reply.code(409).send({ error: 'an update is running' })
+    if (want === 'bench') {
+      // Never point a unit at a branch that is not there: its next update
+      // would fail and roll back for no reason the customer could see.
+      try {
+        const out = (await exec('git', ['ls-remote', '--heads', 'origin', 'bench'], { cwd: repoRoot, timeout: 30000 })).stdout
+        if (!out.trim()) return reply.code(404).send({ error: 'there is no bench channel in the release repository yet' })
+      } catch (err) {
+        return reply.code(502).send({ error: `could not reach the release repository: ${err.message}` })
+      }
+    }
+    try {
+      if (want === 'bench') fs.writeFileSync(channelFile, 'bench\n')
+      else fs.rmSync(channelFile, { force: true })
+      fs.rmSync(snoozeFile, { force: true })
+    } catch (err) {
+      return reply.code(500).send({ error: `could not save the channel: ${err.message}` })
+    }
+    announced = null
+    // Look straight away, so the answer to "switch to bench" is whether there is something there.
+    try { await checkForUpdate() } catch { /* the next scheduled check will try again */ }
+    return { ok: true, channel: readChannel(), available: !!announced }
   })
 
   app.post('/api/system/update/snooze', async () => {

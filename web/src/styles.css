@@ -1616,7 +1616,9 @@ body {
   color: var(--muted);
   padding-top: 1vh;
 }
+.update-panel { flex-wrap: wrap; }
 .update-note { color: var(--ok); font-weight: 700; }
+.update-channel { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 1.2vw; margin-top: 1vh; }
 
 @keyframes toast-in {
   from { opacity: 0; transform: translateX(-50%) translateY(1.5vh); }

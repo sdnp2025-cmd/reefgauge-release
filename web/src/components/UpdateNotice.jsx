@@ -88,6 +88,7 @@ export default function UpdateNotice() {
         {notice.version ? `ReefGauge ${notice.version} is ready` : 'A new version of ReefGauge is ready'}
         {notice.current ? ` (you have ${notice.current})` : ''}.
         {' '}Updating takes a minute or two and the display restarts.
+        {notice.channel === 'bench' ? ' (Early release from the bench channel.)' : ''}
       </p>
       {error && <p className="update-notice-error">{error}</p>}
       <div className="update-notice-actions">
