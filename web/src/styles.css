@@ -1099,7 +1099,12 @@ body {
   to { opacity: 1; }
 }
 
-.hc-content { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 1vh; flex: 1; min-height: 0; }
+.hc-content { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 1vh; flex: 1; min-height: 0; width: 100%; }
+/* The tank card is a <button>, and WebKit (the cog browser) sizes a button's
+   contents to fit them - but each gauge tile is a size container, which by
+   definition reports no size of its own, so the whole grid shrank to a sliver.
+   Chromium stretched it anyway. Saying so explicitly suits both. */
+.hc-gauges { width: 100%; }
 
 .tank-ok-badge {
   font-size: 3.6vh;
