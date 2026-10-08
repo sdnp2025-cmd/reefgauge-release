@@ -428,11 +428,33 @@ async function updates(repoRoot) {
 // it describes the kiosk's real browser under cage - not a headless probe, which
 // would answer for SwiftShader. Nothing else on a sealed unit can say whether
 // the GPU is in use; the first symptom was the radar.
+// The tmpfs the kiosk's browser profile and cache live in (pi/kiosk.sh puts
+// them in $XDG_RUNTIME_DIR, which systemd sizes at about a tenth of RAM). It
+// fills silently and Chromium's reaction is a "Free up space to continue"
+// bubble over the dashboard. Nothing is reported when there is no such tmpfs -
+// a development machine, or a unit whose session never started.
+async function kioskStorage() {
+  const uid = typeof process.getuid === 'function' ? process.getuid() : null
+  if (uid == null) return []
+  const out = await run('df', ['-P', '-k', `/run/user/${uid}`])
+  const row = out?.trim().split('\n')[1]?.split(/\s+/)
+  if (!row || row.length < 6 || !row[5].startsWith('/run/user/')) return []
+  const total = Number(row[1]) * 1024, used = Number(row[2]) * 1024
+  if (!total) return []
+  const pct = Math.round((used / total) * 100)
+  const mb = (n) => `${(n / 1048576).toFixed(0)} MB`
+  return [check('display:storage', 'Display storage', pct >= 80 ? 'warn' : 'ok',
+    `${mb(used)} of ${mb(total)} (${pct}%) in the browser's RAM store`,
+    pct >= 80 ? 'The kiosk browser\'s profile and cache are nearly full. Chromium will put up "Free up space to continue" over the dashboard.' : null,
+    pct >= 80 ? 'Restart the display (it starts with an empty store); units before 0.7.40 fill it again over days.' : null)]
+}
+
 async function display(state) {
+  const store = await kioskStorage()
   const d = state?.display
   if (!d) {
     return [check('gfx', 'Display graphics', 'unknown', 'not reported yet',
-      'The dashboard reports this when it loads. A unit that never has, has not drawn the dashboard since boot.')]
+      'The dashboard reports this when it loads. A unit that never has, has not drawn the dashboard since boot.'), ...store]
   }
   const r = (d.renderer || '').toLowerCase()
   const software = /swiftshader|llvmpipe|softpipe|software/.test(r)
@@ -442,7 +464,7 @@ async function display(state) {
   // composited in software.
   const status = (!d.webgl || software) ? 'warn' : 'ok'
   const value = d.webgl ? `${d.webgl}: ${d.renderer || 'renderer not exposed'}` : 'WebGL unavailable'
-  if (status === 'ok') return [check('gfx', 'Display graphics', 'ok', value)]
+  if (status === 'ok') return [check('gfx', 'Display graphics', 'ok', value), ...store]
 
   // What this process can see of the GL stack, because "unavailable" on its own
   // sends someone to a unit they cannot log into. Each of these is a separate
@@ -463,7 +485,7 @@ async function display(state) {
       ? 'The browser has no WebGL. Nothing in the dashboard needs it, but it usually means the GPU process in Chromium is not healthy and the screen is being drawn in software.'
       : 'WebGL is running in software rather than on the GPU: it works, slowly, and heavy pages may give up.')
       + why + ' | ' + facts.join(' | '),
-    'reefgauge logs <unit> --unit display shows what Chromium and cage printed when the GPU did not start.')]
+    'reefgauge logs <unit> --unit display shows what Chromium and cage printed when the GPU did not start.'), ...store]
 }
 
 export async function collect({ config, state, db, dataDir, repoRoot }) {

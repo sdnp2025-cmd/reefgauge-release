@@ -54,7 +54,13 @@ fi
 # Keep the browser cache in RAM. On an SD-card product the cache is a constant
 # write source and a leading cause of card wear (and therefore of RMAs); losing
 # it on reboot costs nothing because the app is served from localhost.
+# Emptied on every start, not only on reboot. The tmpfs is small (about a tenth
+# of RAM), the kiosk is restarted after every software update, and what the
+# previous run left - its cache, its storage, the old bundle - is exactly
+# what filled it. Chromium's answer to a full profile is a "Free up space to
+# continue" bubble over the dashboard, which is a support call.
 CACHE_DIR="$XDG_RUNTIME_DIR/chromium-cache"
+rm -rf "$CACHE_DIR"
 mkdir -p "$CACHE_DIR"
 
 # And the profile, for the same reason and one more.
@@ -69,6 +75,7 @@ mkdir -p "$CACHE_DIR"
 # localhost and the kiosk is exempt from auth by address (server/src/index.js),
 # so a wiped profile costs one re-fetch.
 PROFILE_DIR="$XDG_RUNTIME_DIR/chromium-profile"
+rm -rf "$PROFILE_DIR"
 mkdir -p "$PROFILE_DIR"
 
 # The panel is a 10-point touchscreen and Chromium finds it — maxTouchPoints
